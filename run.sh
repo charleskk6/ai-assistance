@@ -9,6 +9,13 @@ cd "$(dirname "$0")"
 # shellcheck disable=SC1091
 set -a; source .env; set +a
 
+if [ -z "${LOCAL_ASSISTANT_TOKEN:-}" ]; then
+  echo "LOCAL_ASSISTANT_TOKEN is blank in .env. Generate one:"
+  echo
+  echo "  python3 -c \"import secrets; print('LOCAL_ASSISTANT_TOKEN=' + secrets.token_urlsafe(32))\" >> .env"
+  exit 1
+fi
+
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8000}"
 

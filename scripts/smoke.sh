@@ -2,12 +2,53 @@
 # Acceptance checks against a running assistant. Run on the Mac:
 #   ./scripts/smoke.sh                       (defaults to localhost:8000)
 #   ./scripts/smoke.sh http://my-mac.local:8000
+#   ./scripts/smoke.sh http://my-mac.local:8000 <token>   (bypass .env entirely)
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
 BASE="${1:-http://127.0.0.1:8000}"
-[ -f .env ] && { set -a; . ./.env; set +a; }
-TOKEN="${LOCAL_ASSISTANT_TOKEN:?set LOCAL_ASSISTANT_TOKEN or source .env}"
+ENV_FILE="${ENV_FILE:-.env}"
+
+# Token resolution, in order: 2nd argument, exported variable, then .env.
+# .env is parsed rather than sourced: a stray line in it should not be able to
+# execute, and `source` silently gives up on CRLF line endings.
+read_env_token() {
+  [ -f "$ENV_FILE" ] || return 1
+  sed -n 's/\r$//; s/^[[:space:]]*\(export[[:space:]]\+\)\?LOCAL_ASSISTANT_TOKEN[[:space:]]*=[[:space:]]*//p' \
+    "$ENV_FILE" | tail -n1 | sed 's/^["'"'"']//; s/["'"'"']$//'
+}
+
+TOKEN="${2:-${LOCAL_ASSISTANT_TOKEN:-}}"
+TOKEN_FROM="argument"
+[ -n "$TOKEN" ] && [ -z "${2:-}" ] && TOKEN_FROM="environment"
+if [ -z "$TOKEN" ]; then
+  TOKEN="$(read_env_token || true)"
+  TOKEN_FROM="$ENV_FILE"
+fi
+
+if [ -z "$TOKEN" ]; then
+  echo "No LOCAL_ASSISTANT_TOKEN found."
+  echo "  looked in: the 2nd argument, the environment, and $(pwd)/$ENV_FILE"
+  if [ ! -f "$ENV_FILE" ]; then
+    echo "  -> $ENV_FILE does not exist. Create it and generate a token:"
+    echo
+    echo "     cp .env.example .env"
+  elif ! grep -q "LOCAL_ASSISTANT_TOKEN" "$ENV_FILE"; then
+    echo "  -> $ENV_FILE has no LOCAL_ASSISTANT_TOKEN line at all. Add one:"
+    echo
+  else
+    echo "  -> $ENV_FILE has a LOCAL_ASSISTANT_TOKEN line but it is blank."
+    echo "     (that is how .env.example ships). Set it:"
+    echo
+  fi
+  echo "     python3 -c \"import secrets; print('LOCAL_ASSISTANT_TOKEN=' + secrets.token_urlsafe(32))\" >> .env"
+  echo
+  echo "  Then RESTART the backend - it reads .env once at startup - and re-run this."
+  echo "  Or pass the token directly, without touching .env:"
+  echo
+  echo "     ./scripts/smoke.sh $BASE <token>"
+  exit 1
+fi
 
 pass=0; fail=0
 ask() {  # ask <json> -> prints route (or error code)
@@ -21,7 +62,7 @@ check() { # check <label> <expected> <actual>
 route_of() { printf '%s' "$1" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("route") or d.get("error",""))'; }
 field()    { printf '%s' "$1" | python3 -c "import json,sys; print(json.load(sys.stdin).get('$2',''))"; }
 
-echo "Target: $BASE"
+echo "Target: $BASE   (token from $TOKEN_FROM)"
 echo
 echo "1. Health"
 H=$(curl -s --max-time 10 "$BASE/health") || { echo "  FAIL  backend unreachable"; exit 1; }
@@ -33,6 +74,22 @@ echo "  model: $(printf '%s' "$H" | python3 -c 'import json,sys;print(json.load(
 echo
 echo "2. Auth"
 check "no token rejected" "401" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/ask" -H 'Content-Type: application/json' -d '{"query":"hi"}')"
+
+# A running backend read its config at startup. If .env was edited since, the
+# token here and the token it is enforcing differ, and every check below would
+# fail as "unauthorized" for no obvious reason.
+CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 180 -X POST "$BASE/ask" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"query":"ping","mode":"local","source":"cli"}')
+if [ "$CODE" = "401" ]; then
+  echo "  FAIL  the backend rejected the token from .env"
+  echo
+  echo "  The backend at $BASE is running with a different token than .env holds."
+  echo "  It reads .env once, at startup - so if you edited .env after starting it,"
+  echo "  stop it (Ctrl-C in the run.sh terminal) and run ./run.sh again."
+  exit 1
+fi
+check "valid token accepted" "yes" "$([ "$CODE" = "200" ] && echo yes || echo "HTTP $CODE")"
 
 echo
 echo "3. Routing"
