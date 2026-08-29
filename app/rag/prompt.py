@@ -72,7 +72,10 @@ You have been given evidence extracted from web pages, below. Follow these rules
 - If sources disagree, say they disagree and give the most likely answer with a
   short reason.
 - Do not read out URLs or source names as a list; the app shows sources
-  separately."""
+  separately.
+- Never refer to the evidence in your answer. Do not write "Source 2",
+  "according to the first source", "根據 Source 2", "根據資料" or anything similar.
+  State the fact directly, as if you simply knew it."""
 
 # The evidence is arbitrary text from the open web. This is the security boundary.
 INJECTION_GUARD = """\
@@ -91,9 +94,11 @@ def web_system_prompt(source: str) -> str:
 
 def build_web_user_prompt(query: str, evidence: list[Evidence]) -> str:
     blocks = []
-    for i, ev in enumerate(evidence, start=1):
+    for ev in evidence:
+        # Deliberately unnumbered: a "[Source 2]" label is an affordance the
+        # model will reach for, and it ends up spoken aloud.
         blocks.append(
-            f"[Source {i}] {ev.title} ({ev.domain})"
+            f"{ev.title} ({ev.domain})"
             f"{f' - published {ev.published}' if ev.published else ''}\n{ev.text}"
         )
     body = "\n\n---\n\n".join(blocks)

@@ -79,3 +79,36 @@ def test_does_not_gut_an_answer_whose_fragment_is_the_bulk():
 def test_trailing_bracket_counts_as_a_finished_sentence():
     text = "佢係一個 object（唔係 class）"
     assert to_speech_text(text, drop_trailing_fragment=True) == text
+
+
+def test_strips_spoken_citations():
+    """The model said 「因為根據 Source 2 顯示」 aloud on real hardware."""
+    out = to_speech_text(
+        "而家最新 stable Python version 係 3.14，因為根據 Source 2 顯示，3.14 係 bugfix phase。"
+    )
+    assert "Source" not in out and "根據" not in out
+    assert out == "而家最新 stable Python version 係 3.14，3.14 係 bugfix phase。"
+
+
+def test_strips_english_and_chinese_citation_phrasing():
+    assert to_speech_text("The latest is 3.14.7, according to the second source.") == (
+        "The latest is 3.14.7."
+    )
+    assert to_speech_text("根據資料，最新版本係 3.14.7。") == "最新版本係 3.14.7。"
+    assert to_speech_text("Source 2: the release is 3.14.7.") == "the release is 3.14.7."
+
+
+def test_does_not_touch_legitimate_uses_of_the_word_source():
+    for text in (
+        "Open source software is free.",
+        "呢個 source code 好清楚。",
+        "You can read the source file yourself.",
+    ):
+        assert to_speech_text(text) == text
+
+
+def test_does_not_decapitate_a_sentence_whose_subject_is_a_source():
+    """Deleting the subject leaves a dangling verb, which is worse than the
+    citation it removes."""
+    text = "Source 1 says the release is 3.14.7."
+    assert to_speech_text(text) == text

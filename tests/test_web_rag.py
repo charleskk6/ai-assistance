@@ -229,3 +229,29 @@ def test_local_override_skips_search_entirely(web_client):
     assert body["sources"] == []
     assert not route.called
     assert llm.calls[0]["user"] == "latest Python release"  # prefix stripped
+
+
+@respx.mock
+def test_evidence_blocks_are_not_numbered(web_client):
+    """A "[Source 2]" label is an affordance the model reaches for, and it ends
+    up spoken aloud."""
+    _mock_happy_path()
+    client, llm = web_client()
+    client.post("/ask", json={"query": "latest Python stable version"}, headers=AUTH)
+
+    prompt = llm.calls[0]["user"]
+    assert "[Source 1]" not in prompt and "[Source 2]" not in prompt
+    assert "python.org" in prompt  # provenance is still there, just unnumbered
+    assert "Never refer to the evidence" in llm.calls[0]["system"]
+
+
+@respx.mock
+def test_response_carries_per_stage_timings(web_client):
+    _mock_happy_path()
+    client, _ = web_client()
+    body = client.post(
+        "/ask", json={"query": "latest Python stable version"}, headers=AUTH
+    ).json()
+    for key in ("search_ms", "fetch_ms", "rank_ms", "llm_ms", "context_chars"):
+        assert key in body["timings"], key
+    assert body["timings"]["context_chars"] > 0
