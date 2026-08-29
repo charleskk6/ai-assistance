@@ -169,11 +169,14 @@ class WebRagPipeline:
         stats["used"] = len(evidence)
 
         user_prompt = build_web_user_prompt(query, evidence)
-        stats["context_chars"] = len(user_prompt)
+        system = web_system_prompt(source)
+        # Both messages are prefilled, so both count. Reporting only the evidence
+        # understates the cost and makes the ms-per-char figure drift.
+        stats["context_chars"] = len(user_prompt) + len(system)
 
         t3 = time.perf_counter()
         completion = await self.llm.complete(
-            web_system_prompt(source),
+            system,
             user_prompt,
             max_tokens=max_tokens,
             temperature=self.settings.llm_temperature,
