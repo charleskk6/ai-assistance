@@ -45,6 +45,29 @@ Tap the arrow to expand it and set:
 Setting the language explicitly matters. On "Automatic" the dictation often
 falls back to your system language and mangles Cantonese.
 
+#### If Cantonese is not in the list
+
+It is not there by default. The list only offers languages enabled for dictation
+on the device, which is driven by your installed keyboards.
+
+1. Settings -> General -> **Keyboard** -> **Keyboards** -> **Add New Keyboard...**
+   -> **Chinese (Traditional)** -> tick **Cantonese** (粵語). You are adding it for
+   the dictation model, not to type with, so any input method will do.
+2. Settings -> General -> **Keyboard** -> **Enable Dictation** -> On. On recent
+   iOS there is also a **Dictation Languages** list on that screen; tick
+   Cantonese there too if you see it.
+3. Reopen the Shortcut. If the list is still stale, delete the Dictate Text
+   action and add it again.
+
+Two things that cause confusion here:
+
+- **Dictate Text and Speak Text have separate language lists**, from different
+  subsystems. Adding the keyboard fixes dictation; the *voice* comes from
+  Settings -> Accessibility -> Spoken Content -> Voices (see step 5).
+- **Do not substitute Mandarin** if Cantonese will not appear. It transcribes
+  spoken Cantonese badly - the phonology is different. `Automatic` with an
+  appropriate device language is a better fallback.
+
 #### Mixing Cantonese and English
 
 iOS dictates **one language at a time** - there is no mixed mode. Cantonese
