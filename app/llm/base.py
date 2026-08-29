@@ -26,6 +26,11 @@ class Completion:
     # than because the model finished its sentence. Guessing this from the text
     # is unreliable - plenty of complete answers end without punctuation.
     truncated: bool = False
+    # The runtime's own counters. Without these, "is prefill or generation the
+    # slow part, and why did it stop early" is guesswork from the answer's shape.
+    done_reason: str = ""
+    prompt_tokens: int = 0
+    output_tokens: int = 0
 
 
 @dataclass

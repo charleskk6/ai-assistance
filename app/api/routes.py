@@ -102,7 +102,10 @@ async def ask(req: AskRequest, request: Request):
         latency_ms=latency_ms,
         timings={
             k: stats[k]
-            for k in ("search_ms", "fetch_ms", "rank_ms", "llm_ms", "context_chars")
+            for k in (
+                "search_ms", "fetch_ms", "rank_ms", "llm_ms", "context_chars",
+                "prompt_tokens", "output_tokens", "done_reason",
+            )
             if k in stats
         },
     )
@@ -132,6 +135,12 @@ async def _answer(
             temperature=settings.llm_temperature,
         )
         answer, truncated = completion.text, completion.truncated
+        stats = {
+            "llm_ms": 0,  # the local route is a single call; latency_ms covers it
+            "prompt_tokens": completion.prompt_tokens,
+            "output_tokens": completion.output_tokens,
+            "done_reason": completion.done_reason,
+        }
     return answer, stats, sources, truncated
 
 
@@ -162,4 +171,12 @@ async def health(request: Request) -> HealthResponse:
             detail=llm_health.detail,
         ),
         search_provider=settings.search_provider,
+        config={
+            "rag_context_budget_chars": settings.rag_context_budget_chars,
+            "rag_top_chunks": settings.rag_top_chunks,
+            "chunk_chars": settings.chunk_chars,
+            "fetch_max_pages": settings.fetch_max_pages,
+            "llm_num_ctx": settings.llm_num_ctx,
+            "llm_max_tokens_siri": settings.llm_max_tokens_siri,
+        },
     )

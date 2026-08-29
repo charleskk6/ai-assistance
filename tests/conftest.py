@@ -53,7 +53,13 @@ class ScriptedLLM:
             {"system": system, "user": user, "max_tokens": max_tokens,
              "temperature": temperature}
         )
-        return Completion(self.answer, truncated=self.truncated)
+        return Completion(
+            self.answer,
+            truncated=self.truncated,
+            done_reason="length" if self.truncated else "stop",
+            prompt_tokens=11,
+            output_tokens=22,
+        )
 
     async def health(self):
         from app.llm.base import LLMHealth

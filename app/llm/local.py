@@ -97,7 +97,14 @@ class OllamaProvider(LLMProvider):
         answer = strip_thinking(content)
         if not answer:
             raise LLMError("llm_empty", "The local model returned an empty answer.")
-        return Completion(answer, truncated=data.get("done_reason") == "length")
+        done_reason = data.get("done_reason", "")
+        return Completion(
+            answer,
+            truncated=done_reason == "length",
+            done_reason=done_reason,
+            prompt_tokens=data.get("prompt_eval_count", 0) or 0,
+            output_tokens=data.get("eval_count", 0) or 0,
+        )
 
     async def health(self) -> LLMHealth:
         try:

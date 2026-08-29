@@ -179,6 +179,9 @@ class WebRagPipeline:
             temperature=self.settings.llm_temperature,
         )
         stats["llm_ms"] = int((time.perf_counter() - t3) * 1000)
+        stats["prompt_tokens"] = completion.prompt_tokens
+        stats["output_tokens"] = completion.output_tokens
+        stats["done_reason"] = completion.done_reason
         return WebAnswer(
             answer=completion.text,
             evidence=evidence,

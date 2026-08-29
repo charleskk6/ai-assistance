@@ -47,3 +47,30 @@ def test_ask_rejects_empty_query(client):
 def test_ask_rejects_invalid_mode(client):
     r = client.post("/ask", json={"query": "hi", "mode": "quantum"}, headers=AUTH)
     assert r.status_code == 422
+
+
+def test_health_reports_the_settings_actually_in_effect(client):
+    """A .env copied from an older .env.example silently pins old defaults; the
+    only symptom is that a tuning change appears to do nothing."""
+    cfg = client.get("/health").json()["config"]
+    for key in (
+        "rag_context_budget_chars", "rag_top_chunks", "chunk_chars",
+        "fetch_max_pages", "llm_num_ctx", "llm_max_tokens_siri",
+    ):
+        assert key in cfg, key
+
+
+def test_health_config_reflects_an_override(scripted_client):
+    client, _ = scripted_client("ok", rag_context_budget_chars=1234)
+    assert client.get("/health").json()["config"]["rag_context_budget_chars"] == 1234
+
+
+def test_local_route_reports_token_counters(scripted_client):
+    client, _ = scripted_client("ok")
+    timings = client.post(
+        "/ask", json={"query": "hi", "source": "cli"}, headers=AUTH
+    ).json()["timings"]
+    # ScriptedLLM reports zeros, but the keys must be plumbed through so a real
+    # runtime's counters reach the caller.
+    for key in ("prompt_tokens", "output_tokens", "done_reason"):
+        assert key in timings, key

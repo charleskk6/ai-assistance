@@ -108,7 +108,8 @@ timings()  { printf '%s' "$1" | python3 -c "
 import json, sys
 t = json.load(sys.stdin).get('timings') or {}
 if t:
-    order = ['search_ms', 'fetch_ms', 'rank_ms', 'llm_ms', 'context_chars']
+    order = ['search_ms', 'fetch_ms', 'rank_ms', 'llm_ms', 'context_chars',
+             'prompt_tokens', 'output_tokens', 'done_reason']
     print('  stages: ' + '  '.join(f'{k}={t[k]}' for k in order if k in t))
 "; }
 # ${#var} counts bytes on some bash builds and characters on others, which makes
@@ -123,6 +124,12 @@ check "backend reachable"   "True" "$(printf '%s' "$H" | python3 -c 'import json
 check "llm runtime up"      "True" "$(printf '%s' "$H" | python3 -c 'import json,sys;print(json.load(sys.stdin)["llm"]["runtime_ok"])')"
 check "model available"     "True" "$(printf '%s' "$H" | python3 -c 'import json,sys;print(json.load(sys.stdin)["llm"]["model_ok"])')"
 echo "  model: $(printf '%s' "$H" | python3 -c 'import json,sys;print(json.load(sys.stdin)["llm"]["model"])')"
+printf '%s' "$H" | python3 -c "
+import json, sys
+cfg = json.load(sys.stdin).get('config') or {}
+if cfg:
+    print('  config: ' + '  '.join(k + '=' + str(v) for k, v in cfg.items()))
+"
 
 echo
 echo "2. Auth"

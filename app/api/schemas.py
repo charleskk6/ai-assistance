@@ -36,7 +36,7 @@ class AskResponse(BaseModel):
     latency_ms: int
     # Per-stage breakdown, so latency can be tuned without reading server logs.
     # The Shortcut only ever reads "answer" and ignores this.
-    timings: dict[str, int] = {}
+    timings: dict[str, int | str] = {}
 
 
 class ErrorResponse(BaseModel):
@@ -57,3 +57,7 @@ class HealthResponse(BaseModel):
     backend: bool
     llm: LLMHealthInfo
     search_provider: str
+    # The values actually in effect. A .env copied from an older .env.example
+    # silently pins old defaults, which is invisible until you wonder why a
+    # tuning change did nothing.
+    config: dict[str, int | str] = {}
