@@ -47,7 +47,6 @@ def write_env(tmp_path, text: str):
         ("LOCAL_ASSISTANT_TOKEN=tok123\r\n", "CRLF line endings"),
         ("# LOCAL_ASSISTANT_TOKEN=\nLOCAL_ASSISTANT_TOKEN=tok123\n", "after a comment"),
         ("LOCAL_ASSISTANT_TOKEN=\nLOCAL_ASSISTANT_TOKEN=tok123\n", "blank then real"),
-        ("LOCAL_ASSISTANT_TOKEN=tok123\nLOCAL_ASSISTANT_TOKEN=\n", "real then blank"),
     ],
 )
 def test_smoke_finds_the_token(tmp_path, content, label):
@@ -56,10 +55,33 @@ def test_smoke_finds_the_token(tmp_path, content, label):
     assert "No LOCAL_ASSISTANT_TOKEN" not in result.stdout, label
 
 
-def test_real_then_blank_is_the_macos_regression(tmp_path):
-    """A single real assignment must never be reported as blank - that was the
-    GNU-sed bug, which found nothing at all and blamed the file."""
+def test_a_single_real_assignment_is_never_reported_as_blank(tmp_path):
+    """The regression that cost several rounds: a hand-rolled parser found
+    nothing and blamed the file, which plainly held a valid token."""
     env = write_env(tmp_path, "# comment\nHOST=0.0.0.0\nLOCAL_ASSISTANT_TOKEN=IYMn7fIg\n")
+    assert "token from" in run_smoke(env).stdout
+
+
+def test_a_trailing_blank_assignment_empties_the_token(tmp_path):
+    """The script must agree with the server, not be cleverer than it.
+
+    pydantic-settings takes the last assignment, so a trailing blank one empties
+    a real token above it and the backend refuses to start. Reporting a usable
+    token here would send the script off testing against a server that is not
+    running.
+    """
+    env = write_env(tmp_path, "LOCAL_ASSISTANT_TOKEN=tok123\nLOCAL_ASSISTANT_TOKEN=\n")
+    out = run_smoke(env).stdout
+    assert "No LOCAL_ASSISTANT_TOKEN" in out
+    assert "line 1:" in out and "line 2:" in out  # both shown, so it is fixable
+
+
+def test_script_and_app_resolve_the_same_token(tmp_path):
+    """Guaranteed by construction: the script asks the app's own loader."""
+    from app.config import Settings
+
+    env = write_env(tmp_path, "HOST=0.0.0.0\nLOCAL_ASSISTANT_TOKEN=agreed-token\n")
+    assert Settings(_env_file=env).local_assistant_token == "agreed-token"
     assert "token from" in run_smoke(env).stdout
 
 

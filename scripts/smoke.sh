@@ -13,14 +13,23 @@ BUILD="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 # Token resolution, in order: 2nd argument, exported variable, then .env.
 # .env is parsed rather than sourced: a stray line in it should not be able to
 # execute, and `source` silently gives up on CRLF line endings.
-# A blank "LOCAL_ASSISTANT_TOKEN=" is the placeholder .env.example ships with,
-# never a real value - so skip blanks and take the last assignment that has one.
-# Parsed with python3 (already required below for JSON): sed's \+ and \? are GNU
-# extensions that BSD sed on macOS treats as literal characters, which silently
-# made this find nothing at all.
+# Ask the application's own configuration loader for the token, rather than
+# re-implementing .env parsing here. Two hand-rolled parsers have now disagreed
+# with the server about the same file; this one cannot, because it IS the
+# server's loader - same file, same precedence, same answer. If it comes back
+# empty, the backend could not have started either, which is useful to know.
+#
+# LOCAL_ASSISTANT_TOKEN is unset for the child so an exported empty string
+# cannot mask the file.
 read_env_token() {
   [ -f "$ENV_FILE" ] || return 1
-  python3 - "$ENV_FILE" <<'PYEOF'
+  if [ -x .venv/bin/python ]; then
+    env -u LOCAL_ASSISTANT_TOKEN .venv/bin/python -c \
+      'import sys; from app.config import Settings; print(Settings(_env_file=sys.argv[1]).local_assistant_token)' \
+      "$ENV_FILE" 2>/dev/null && return 0
+  fi
+  # No venv (or the import failed): fall back to reading the file directly.
+  env -u LOCAL_ASSISTANT_TOKEN python3 - "$ENV_FILE" <<'PYEOF'
 import re, sys
 
 value = ""
