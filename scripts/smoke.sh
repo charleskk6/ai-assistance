@@ -95,6 +95,9 @@ check() { # check <label> <expected> <actual>
 }
 route_of() { printf '%s' "$1" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("route") or d.get("error",""))'; }
 field()    { printf '%s' "$1" | python3 -c "import json,sys; print(json.load(sys.stdin).get('$2',''))"; }
+# ${#var} counts bytes on some bash builds and characters on others, which makes
+# a CJK answer's length meaningless. Count in python3 instead.
+charlen()  { printf '%s' "$1" | python3 -c "import sys; print(len(sys.stdin.read()))"; }
 
 echo "Target: $BASE   (token from $TOKEN_FROM, build $BUILD)"
 echo
@@ -138,7 +141,7 @@ ANS=$(field "$A" answer)
 case "$ANS" in *'#'*|*'|'*|*'http'*|*'**'*) echo "  FAIL  answer contains markup a TTS voice would read"; fail=$((fail+1));;
   *) echo "  PASS  answer is speech-clean"; pass=$((pass+1));; esac
 echo "  latency: $(field "$A" latency_ms) ms"
-echo "  answer (${#ANS} bytes): $ANS"
+echo "  answer ($(charlen "$ANS") chars): $ANS"
 
 echo
 echo "5. Acceptance Test B - web RAG, grounded, sources separate"
@@ -150,7 +153,7 @@ ANS=$(field "$B" answer)
 case "$ANS" in *http*) echo "  FAIL  a URL leaked into the spoken answer"; fail=$((fail+1));;
   *) echo "  PASS  no URL in the spoken answer"; pass=$((pass+1));; esac
 echo "  latency: $(field "$B" latency_ms) ms"
-echo "  answer (${#ANS} bytes): $ANS"
+echo "  answer ($(charlen "$ANS") chars): $ANS"
 printf '%s' "$B" | python3 -c 'import json,sys
 for s in json.load(sys.stdin).get("sources",[]): print("  source:  %s - %s" % (s["domain"], s["title"][:60]))'
 
