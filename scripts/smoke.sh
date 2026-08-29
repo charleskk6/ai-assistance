@@ -95,6 +95,15 @@ check() { # check <label> <expected> <actual>
 }
 route_of() { printf '%s' "$1" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("route") or d.get("error",""))'; }
 field()    { printf '%s' "$1" | python3 -c "import json,sys; print(json.load(sys.stdin).get('$2',''))"; }
+# A cut-off answer ("...唔係喺個 class") is speech-clean but still broken, so
+# completeness is checked separately. Terminators are written as escapes to keep
+# quotes out of the nested shell/python string.
+complete_p() { printf '%s' "$1" | python3 -c "
+import sys
+TERMINATORS = '.!?\u3002\uff01\uff1f\u2026\uff09)\u3011\u300d\u300f\u201d'
+answer = sys.stdin.read().strip()
+print('yes' if answer and answer[-1] in TERMINATORS else 'no')
+"; }
 timings()  { printf '%s' "$1" | python3 -c "
 import json, sys
 t = json.load(sys.stdin).get('timings') or {}
@@ -147,6 +156,7 @@ check "route" "local" "$(route_of "$A")"
 ANS=$(field "$A" answer)
 case "$ANS" in *'#'*|*'|'*|*'http'*|*'**'*) echo "  FAIL  answer contains markup a TTS voice would read"; fail=$((fail+1));;
   *) echo "  PASS  answer is speech-clean"; pass=$((pass+1));; esac
+check "answer is a complete sentence" "yes" "$(complete_p "$ANS")"
 echo "  latency: $(field "$A" latency_ms) ms"
 timings "$A"
 echo "  answer ($(charlen "$ANS") chars): $ANS"
@@ -160,6 +170,9 @@ NSRC=$(printf '%s' "$B" | python3 -c 'import json,sys; print(len(json.load(sys.s
 ANS=$(field "$B" answer)
 case "$ANS" in *http*) echo "  FAIL  a URL leaked into the spoken answer"; fail=$((fail+1));;
   *) echo "  PASS  no URL in the spoken answer"; pass=$((pass+1));; esac
+case "$ANS" in *[Ss]ource*|*根據*) echo "  FAIL  a citation leaked into the spoken answer"; fail=$((fail+1));;
+  *) echo "  PASS  no citation in the spoken answer"; pass=$((pass+1));; esac
+check "answer is a complete sentence" "yes" "$(complete_p "$ANS")"
 echo "  latency: $(field "$B" latency_ms) ms"
 timings "$B"
 echo "  answer ($(charlen "$ANS") chars): $ANS"
