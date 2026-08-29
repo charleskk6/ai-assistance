@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -10,6 +11,9 @@ from app.api.routes import router
 from app.config import Settings, get_settings
 from app.llm.base import LLMError
 from app.llm.factory import build_llm
+from app.rag.pipeline import WebRagPipeline
+from app.retrieval.fetcher import PageFetcher
+from app.search.provider import build_search_provider
 from app.utils.logging import get_logger, setup_logging
 
 log = get_logger("assistant")
@@ -28,7 +32,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.settings = settings
+        app.state.limiter = asyncio.Semaphore(settings.max_concurrent_requests)
         app.state.llm = build_llm(settings)
+        app.state.search = build_search_provider(settings)
+        app.state.fetcher = PageFetcher(
+            timeout_s=settings.fetch_timeout_s,
+            max_bytes=settings.fetch_max_bytes,
+            concurrency=settings.fetch_concurrency,
+            user_agent=settings.fetch_user_agent,
+            check_public=not settings.fetch_allow_private_urls,
+        )
+        app.state.rag = WebRagPipeline(
+            settings, app.state.search, app.state.fetcher, app.state.llm
+        )
         log.info(
             "assistant ready provider=%s model=%s search=%s listen=%s:%d",
             settings.llm_provider,
@@ -41,6 +57,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             yield
         finally:
             await app.state.llm.aclose()
+            await app.state.search.aclose()
+            await app.state.fetcher.aclose()
 
     app = FastAPI(title="Local Assistant", version="0.1.0", lifespan=lifespan)
     app.include_router(router)

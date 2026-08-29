@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     fetch_max_bytes: int = 2_000_000  # hard cap; oversized responses are dropped
     fetch_concurrency: int = 4        # bounded, this is a fanless laptop
     fetch_user_agent: str = "LocalAssistant/0.1 (personal use)"
+    # Off by default: search results are attacker-influenceable, so fetching a
+    # private address would let a poisoned result probe your LAN. Turn it on only
+    # to point the assistant at an intranet you trust.
+    fetch_allow_private_urls: bool = False
 
     # --- RAG ----------------------------------------------------------------
     chunk_chars: int = 1200
@@ -71,6 +75,8 @@ class Settings(BaseSettings):
 
     # --- end-to-end ---------------------------------------------------------
     request_timeout_s: float = 150.0
+    # A fanless Air should not be running four inferences at once; queue instead.
+    max_concurrent_requests: int = 2
 
 
 @lru_cache
