@@ -44,7 +44,9 @@ class Settings(BaseSettings):
     # avoid a cold reload between back-to-back Siri questions, short enough that
     # an idle laptop gets its RAM back.
     llm_keep_alive: str = "10m"
-    llm_num_ctx: int = 8192
+    # Ollama allocates a KV cache for the whole window; 4096 comfortably holds
+    # the trimmed evidence budget below plus the answer.
+    llm_num_ctx: int = 4096
     llm_timeout_s: float = 120.0
     # Spoken answers must stay short; API/CLI callers may want more.
     llm_max_tokens_siri: int = 400
@@ -73,10 +75,14 @@ class Settings(BaseSettings):
     fetch_allow_private_urls: bool = False
 
     # --- RAG ----------------------------------------------------------------
-    chunk_chars: int = 1200
-    chunk_overlap_chars: int = 150
-    rag_top_chunks: int = 6
-    rag_context_budget_chars: int = 6000
+    # Measured on an M3 Air: prefill, not generation, dominates the web route -
+    # 6200 characters of evidence cost ~17s of the 19s the model took, for an
+    # answer of about 45 tokens. Smaller chunks also retrieve more precisely,
+    # since a chunk is either relevant or it is not.
+    chunk_chars: int = 800
+    chunk_overlap_chars: int = 120
+    rag_top_chunks: int = 5
+    rag_context_budget_chars: int = 3000
     rag_min_evidence_chars: int = 300  # below this we admit we found nothing
 
     # --- end-to-end ---------------------------------------------------------

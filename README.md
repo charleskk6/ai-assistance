@@ -62,21 +62,30 @@ a fanless Air that spends most of its day idle. The `LLMProvider` interface is
 two methods, so swapping in MLX later means writing one class and one line in
 `app/llm/factory.py`.
 
-**Qwen3 8B (Q4_K_M), not 14B.** The M3's ~100 GB/s memory bandwidth is the
-ceiling on generation speed:
+**Qwen3 8B (Q4_K_M), not 14B.** Measured on a MacBook Air M3 / 24 GB, via
+`scripts/compare-models.sh`:
 
-| | RAM resident | generation | ~150-token answer | + 3k-token RAG prefill |
-|---|---|---|---|---|
-| `qwen3:8b` | ~6.5 GB | ~16–20 tok/s | ~8 s | ~+4–6 s |
-| `qwen3:14b` | ~11 GB | ~9–11 tok/s | ~15 s | ~+8–11 s |
+| | local answer | web answer | `llm_ms` on the web route |
+|---|---|---|---|
+| `qwen3:8b` | 6.5 s | 23.0 s | 19,350 |
+| `qwen3:14b` | 10.5 s | 39.6 s | 35,371 |
 
-14B is the better writer, but a 20-second wait while standing there holding a
-phone feels broken. Both fit comfortably in 24 GB. Set `LLM_MODEL=qwen3:14b` in
-`.env` if you'd rather have the quality — nothing else changes.
+14B is 1.83x slower, which is what the M3's ~100 GB/s memory bandwidth predicts
+for a model roughly twice the size. It did not answer better: on the same
+evidence it said only "最新 stable Python version 係 Python 3.14", losing the
+3.14.7 detail 8B got right. Both handled Cantonese well. Set `LLM_MODEL=qwen3:14b`
+if you want to judge for yourself - nothing else changes - but measure it first.
 
 Qwen3 is a hybrid reasoning model, and its thinking mode costs many seconds per
 spoken answer, so `LLM_ENABLE_THINKING=false` is the default; the response parser
 strips any `<think>` block that appears anyway.
+
+**Keep the evidence small.** The same measurements showed the web route is
+dominated by prefill, not generation or retrieval: search and fetch together took
+3.7 s, while the model spent ~17 s reading 6,213 characters of evidence before
+producing a ~45-token answer. The defaults are tuned accordingly
+(`RAG_CONTEXT_BUDGET_CHARS=3000`, `CHUNK_CHARS=800`). Every web response returns
+a `timings` breakdown so you can retune for your own hardware.
 
 **DuckDuckGo search by default.** No key, no account, £0. It rate-limits under
 load; when it does, set `SEARCH_PROVIDER=brave` and `BRAVE_API_KEY` (free tier,
