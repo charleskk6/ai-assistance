@@ -1,0 +1,10 @@
+[project]
+name = "local-assistant"
+version = "0.1.0"
+description = "Local-first AI assistant: Siri -> FastAPI -> Local LLM or Web Search RAG -> Apple TTS"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = ["ignore::DeprecationWarning"]
