@@ -45,6 +45,30 @@ Tap the arrow to expand it and set:
 Setting the language explicitly matters. On "Automatic" the dictation often
 falls back to your system language and mangles Cantonese.
 
+#### Mixing Cantonese and English
+
+iOS dictates **one language at a time** - there is no mixed mode. Cantonese
+(Hong Kong) is nonetheless the right setting, because Apple's Cantonese
+recogniser is trained on Hong Kong speech, which is natively code-switched.
+Common terms (`file`, `download`, `server`, `update`, `Python`) come through
+fine.
+
+Multi-word technical jargon is where it breaks down - "dependency injection",
+"vector database" often arrive as Chinese homophones. Three things help:
+
+- A slight **pause before and after** the English phrase, so the recogniser
+  segments it.
+- **Enable the English keyboard** (Settings -> General -> Keyboard) even if you
+  never type with it; the English acoustic model stays loaded.
+- For English-heavy questions, **duplicate this Shortcut** with `Language:
+  English` and a different name ("Ask My Assistant in English"). Two Shortcuts,
+  one backend, no code change.
+
+The backend also tells the model that `source: siri` input is dictated and may
+contain garbled English, so it infers the intended term rather than answering
+the homophone. That handles the common cases; it cannot rescue a transcription
+that lost the meaning entirely.
+
 ### 3. Get Contents of URL
 
 Add **Get Contents of URL**. Put the URL in the field:

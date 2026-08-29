@@ -53,9 +53,19 @@ Be direct and concrete. If you are not sure about something, say so plainly
 rather than inventing detail."""
 
 
+# Only Siri input is dictated, so this cost is not paid on api/cli requests.
+_DICTATION_RULES = """\
+This question was dictated, and iOS dictates one language at a time, so spoken
+English terms may arrive as Chinese homophones. Infer what was meant and answer
+that, without remarking on the transcription."""
+
+
 def system_prompt(source: str) -> str:
     style = _SPEECH_RULES if source == "siri" else _TEXT_RULES
-    return f"{BASE_PERSONA}\n\n{_LANGUAGE_RULES}\n\n{style}"
+    parts = [BASE_PERSONA, _LANGUAGE_RULES, style]
+    if source == "siri":
+        parts.append(_DICTATION_RULES)
+    return "\n\n".join(parts)
 
 
 GROUNDING_RULES = """\

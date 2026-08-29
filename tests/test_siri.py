@@ -89,3 +89,17 @@ def test_cantonese_prompt_names_the_actual_substitutions(scripted_client):
     for pair in ("嘅 not 的", "係 not 是", "唔 not 不", "佢 not 它"):
         assert pair in system
     assert "design pattern" in system and "設計模式" in system  # keep-in-English list
+
+
+def test_siri_prompt_warns_the_model_about_dictation(scripted_client):
+    """iOS dictates one language at a time, so spoken English arrives garbled."""
+    client, llm = scripted_client("ok")
+    client.post("/ask", json={"query": "解釋下 DI", "source": "siri"}, headers=AUTH)
+    assert "dictated" in llm.calls[0]["system"]
+
+
+def test_typed_callers_do_not_pay_for_the_dictation_rule(scripted_client):
+    """api/cli input is typed; the note is prefill cost for nothing."""
+    client, llm = scripted_client("ok")
+    client.post("/ask", json={"query": "explain DI", "source": "api"}, headers=AUTH)
+    assert "dictated" not in llm.calls[0]["system"]
