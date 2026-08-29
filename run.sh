@@ -3,16 +3,17 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-[ -f .env ] || { echo "No .env found. Copy .env.example to .env and set LOCAL_ASSISTANT_TOKEN."; exit 1; }
+[ -f .env ] || { echo "No .env found. Run: ./scripts/set-token.sh"; exit 1; }
 [ -d .venv ] || { echo "No .venv found. Run: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"; exit 1; }
 
 # shellcheck disable=SC1091
 set -a; source .env; set +a
 
 if [ -z "${LOCAL_ASSISTANT_TOKEN:-}" ]; then
-  echo "LOCAL_ASSISTANT_TOKEN is blank in .env. Generate one:"
+  echo "LOCAL_ASSISTANT_TOKEN is blank in .env."
+  grep -n "LOCAL_ASSISTANT_TOKEN" .env | sed 's/^/  line /'
   echo
-  echo "  python3 -c \"import secrets; print('LOCAL_ASSISTANT_TOKEN=' + secrets.token_urlsafe(32))\" >> .env"
+  echo "  Fix it with:  ./scripts/set-token.sh"
   exit 1
 fi
 
