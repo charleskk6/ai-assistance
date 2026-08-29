@@ -8,6 +8,7 @@ cd "$(dirname "$0")/.."
 
 BASE="${1:-http://127.0.0.1:8000}"
 ENV_FILE="${ENV_FILE:-.env}"
+BUILD="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
 # Token resolution, in order: 2nd argument, exported variable, then .env.
 # .env is parsed rather than sourced: a stray line in it should not be able to
@@ -46,7 +47,12 @@ fi
 
 if [ -z "$TOKEN" ]; then
   echo "No LOCAL_ASSISTANT_TOKEN found."
-  echo "  looked in: the 2nd argument, the environment, and $(pwd)/$ENV_FILE"
+  echo "  script build: $BUILD   python3: $(command -v python3 || echo MISSING)"
+  case "$ENV_FILE" in /*) SHOWN_ENV="$ENV_FILE";; *) SHOWN_ENV="$(pwd)/$ENV_FILE";; esac
+  echo "  looked in: the 2nd argument, the environment, and $SHOWN_ENV"
+  if [ -f "$ENV_FILE" ]; then
+    echo "  the parser read these values from it: [$(read_env_token || true)]"
+  fi
   if [ ! -f "$ENV_FILE" ]; then
     echo "  -> $ENV_FILE does not exist. Create it and generate a token:"
     echo
@@ -81,7 +87,7 @@ check() { # check <label> <expected> <actual>
 route_of() { printf '%s' "$1" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("route") or d.get("error",""))'; }
 field()    { printf '%s' "$1" | python3 -c "import json,sys; print(json.load(sys.stdin).get('$2',''))"; }
 
-echo "Target: $BASE   (token from $TOKEN_FROM)"
+echo "Target: $BASE   (token from $TOKEN_FROM, build $BUILD)"
 echo
 echo "1. Health"
 H=$(curl -s --max-time 10 "$BASE/health") || { echo "  FAIL  backend unreachable"; exit 1; }
