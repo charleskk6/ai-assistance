@@ -31,10 +31,8 @@ git clone <this repo> && cd ai-assistance
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 
-# 3. Config - .env.example ships with a BLANK token, so generate one
-cp .env.example .env
-python3 -c "import secrets; print('LOCAL_ASSISTANT_TOKEN=' + secrets.token_urlsafe(32))" >> .env
-#    (appending is fine: the later assignment wins over the blank one)
+# 3. Config - creates .env and puts exactly one bearer token in it
+./scripts/set-token.sh
 
 # 4. Run
 ./run.sh
@@ -46,6 +44,11 @@ Then check it:
 curl -s localhost:8000/health | python3 -m json.tool     # expect status: ok
 ./scripts/smoke.sh                                       # runs both acceptance tests
 ```
+
+Note that `.env` is read once, at startup: after changing it, restart `run.sh`.
+Every `LOCAL_ASSISTANT_TOKEN` assignment in the file is read, and the **last one
+wins** - so a leftover blank line silently empties a real token set above it.
+`./scripts/set-token.sh` exists to guarantee there is only ever one.
 
 Finally build the iPhone Shortcut: **[docs/apple-shortcut.md](docs/apple-shortcut.md)**.
 Networking and firewall: **[docs/local-network.md](docs/local-network.md)**.

@@ -12,10 +12,12 @@ ENV_FILE="${ENV_FILE:-.env}"
 # Token resolution, in order: 2nd argument, exported variable, then .env.
 # .env is parsed rather than sourced: a stray line in it should not be able to
 # execute, and `source` silently gives up on CRLF line endings.
+# A blank "LOCAL_ASSISTANT_TOKEN=" is the placeholder .env.example ships with,
+# never a real value - so skip blanks and take the last assignment that has one.
 read_env_token() {
   [ -f "$ENV_FILE" ] || return 1
   sed -n 's/\r$//; s/^[[:space:]]*\(export[[:space:]]\+\)\?LOCAL_ASSISTANT_TOKEN[[:space:]]*=[[:space:]]*//p' \
-    "$ENV_FILE" | tail -n1 | sed 's/^["'"'"']//; s/["'"'"']$//'
+    "$ENV_FILE" | sed 's/^["'"'"']//; s/["'"'"']$//' | grep -v '^[[:space:]]*$' | tail -n1
 }
 
 TOKEN="${2:-${LOCAL_ASSISTANT_TOKEN:-}}"
@@ -32,16 +34,17 @@ if [ -z "$TOKEN" ]; then
   if [ ! -f "$ENV_FILE" ]; then
     echo "  -> $ENV_FILE does not exist. Create it and generate a token:"
     echo
-    echo "     cp .env.example .env"
+    echo "     ./scripts/set-token.sh"
   elif ! grep -q "LOCAL_ASSISTANT_TOKEN" "$ENV_FILE"; then
     echo "  -> $ENV_FILE has no LOCAL_ASSISTANT_TOKEN line at all. Add one:"
     echo
   else
-    echo "  -> $ENV_FILE has a LOCAL_ASSISTANT_TOKEN line but it is blank."
-    echo "     (that is how .env.example ships). Set it:"
+    echo "  -> $ENV_FILE assigns LOCAL_ASSISTANT_TOKEN, but every assignment is blank:"
+    grep -n "LOCAL_ASSISTANT_TOKEN" "$ENV_FILE" | sed 's/^/       line /'
+    echo "     Set it with:"
     echo
   fi
-  echo "     python3 -c \"import secrets; print('LOCAL_ASSISTANT_TOKEN=' + secrets.token_urlsafe(32))\" >> .env"
+  echo "     ./scripts/set-token.sh"
   echo
   echo "  Then RESTART the backend - it reads .env once at startup - and re-run this."
   echo "  Or pass the token directly, without touching .env:"
