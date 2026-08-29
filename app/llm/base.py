@@ -20,6 +20,15 @@ class LLMError(RuntimeError):
 
 
 @dataclass
+class Completion:
+    text: str
+    # True when the runtime stopped because it hit the token ceiling, rather
+    # than because the model finished its sentence. Guessing this from the text
+    # is unreliable - plenty of complete answers end without punctuation.
+    truncated: bool = False
+
+
+@dataclass
 class LLMHealth:
     runtime_ok: bool
     model_ok: bool
@@ -38,7 +47,7 @@ class LLMProvider(abc.ABC):
     @abc.abstractmethod
     async def complete(
         self, system: str, user: str, *, max_tokens: int, temperature: float
-    ) -> str:
+    ) -> Completion:
         """Return the assistant's plain-text reply."""
 
     @abc.abstractmethod

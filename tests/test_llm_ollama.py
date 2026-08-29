@@ -22,7 +22,8 @@ async def test_complete_sends_expected_payload_and_strips_thinking():
         )
     )
     out = await provider().complete("sys", "q", max_tokens=100, temperature=0.4)
-    assert out == "The answer is 42."
+    assert out.text == "The answer is 42."
+    assert out.truncated is False
 
     body = route.calls[0].request.read().decode()
     assert '"think":false' in body
@@ -73,9 +74,36 @@ async def test_thinking_enabled_keeps_block_out_of_answer_but_sends_flag():
         return_value=httpx.Response(200, json={"message": {"content": "plain"}})
     )
     p = provider(enable_thinking=True)
-    assert await p.complete("s", "q", max_tokens=10, temperature=0.1) == "plain"
+    assert (await p.complete("s", "q", max_tokens=10, temperature=0.1)).text == "plain"
 
 
 def test_strip_thinking_handles_unterminated_block():
     assert strip_thinking("<think>ran out of tokens") == ""
     assert strip_thinking("hello") == "hello"
+
+
+@respx.mock
+async def test_hitting_the_token_ceiling_is_reported_as_truncated():
+    """Ollama says done_reason=length when it stopped at num_predict."""
+    respx.post(f"{HOST}/api/chat").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "message": {"content": "It needs a databa"},
+                "done_reason": "length",
+            },
+        )
+    )
+    out = await provider().complete("s", "q", max_tokens=10, temperature=0.1)
+    assert out.truncated is True
+
+
+@respx.mock
+async def test_natural_stop_is_not_truncated():
+    respx.post(f"{HOST}/api/chat").mock(
+        return_value=httpx.Response(
+            200, json={"message": {"content": "Done."}, "done_reason": "stop"}
+        )
+    )
+    out = await provider().complete("s", "q", max_tokens=10, temperature=0.1)
+    assert out.truncated is False

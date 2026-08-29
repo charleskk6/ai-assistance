@@ -56,3 +56,36 @@ def test_api_source_gets_larger_budget(scripted_client):
 def test_source_defaults_to_api(client):
     r = client.post("/ask", json={"query": "hi"}, headers=AUTH)
     assert r.status_code == 200
+
+
+def test_truncated_siri_answer_loses_its_half_sentence(scripted_client):
+    """End to end: the runtime says it hit the token ceiling, so the dangling
+    clause never reaches Apple's TTS."""
+    client, llm = scripted_client(
+        "Dependency injection 係一種 design pattern。例如你有個 server object，佢需要一個 databa"
+    )
+    llm.truncated = True
+    body = client.post(
+        "/ask", json={"query": "解釋下 DI", "source": "siri"}, headers=AUTH
+    ).json()
+    assert body["answer"] == "Dependency injection 係一種 design pattern。"
+
+
+def test_untruncated_answer_is_left_alone(scripted_client):
+    text = "Dependency injection 係一種 design pattern，由外面 inject 入嚟"
+    client, llm = scripted_client(text)
+    body = client.post(
+        "/ask", json={"query": "解釋下 DI", "source": "siri"}, headers=AUTH
+    ).json()
+    assert body["answer"] == text
+
+
+def test_cantonese_prompt_names_the_actual_substitutions(scripted_client):
+    """The old prompt just said 'natural Cantonese' and the model drifted into
+    Standard Written Chinese after the first clause."""
+    client, llm = scripted_client("ok")
+    client.post("/ask", json={"query": "解釋下 DI", "source": "siri"}, headers=AUTH)
+    system = llm.calls[0]["system"]
+    for pair in ("嘅 not 的", "係 not 是", "唔 not 不", "佢 not 它"):
+        assert pair in system
+    assert "design pattern" in system and "設計模式" in system  # keep-in-English list

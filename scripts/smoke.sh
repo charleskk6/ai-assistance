@@ -104,7 +104,7 @@ ANS=$(field "$A" answer)
 case "$ANS" in *'#'*|*'|'*|*'http'*|*'**'*) echo "  FAIL  answer contains markup a TTS voice would read"; fail=$((fail+1));;
   *) echo "  PASS  answer is speech-clean"; pass=$((pass+1));; esac
 echo "  latency: $(field "$A" latency_ms) ms"
-echo "  answer:  ${ANS:0:160}"
+echo "  answer (${#ANS} bytes): $ANS"
 
 echo
 echo "5. Acceptance Test B - web RAG, grounded, sources separate"
@@ -116,7 +116,7 @@ ANS=$(field "$B" answer)
 case "$ANS" in *http*) echo "  FAIL  a URL leaked into the spoken answer"; fail=$((fail+1));;
   *) echo "  PASS  no URL in the spoken answer"; pass=$((pass+1));; esac
 echo "  latency: $(field "$B" latency_ms) ms"
-echo "  answer:  ${ANS:0:200}"
+echo "  answer (${#ANS} bytes): $ANS"
 printf '%s' "$B" | python3 -c 'import json,sys
 for s in json.load(sys.stdin).get("sources",[]): print("  source:  %s - %s" % (s["domain"], s["title"][:60]))'
 

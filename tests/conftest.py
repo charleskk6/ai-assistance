@@ -38,17 +38,22 @@ class ScriptedLLM:
 
     name = "scripted"
 
-    def __init__(self, answer: str = "ok", model: str = "scripted") -> None:
+    def __init__(
+        self, answer: str = "ok", model: str = "scripted", truncated: bool = False
+    ) -> None:
         self.model = model
         self.answer = answer
+        self.truncated = truncated
         self.calls: list[dict] = []
 
     async def complete(self, system, user, *, max_tokens, temperature):
+        from app.llm.base import Completion
+
         self.calls.append(
             {"system": system, "user": user, "max_tokens": max_tokens,
              "temperature": temperature}
         )
-        return self.answer
+        return Completion(self.answer, truncated=self.truncated)
 
     async def health(self):
         from app.llm.base import LLMHealth

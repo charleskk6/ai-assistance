@@ -8,6 +8,7 @@ finishes.
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import dataclass, field
 
 from app.config import Settings
@@ -28,6 +29,7 @@ class WebAnswer:
     answer: str
     evidence: list[Evidence]
     stats: dict = field(default_factory=dict)
+    truncated: bool = False
 
     @property
     def sources(self) -> list[Evidence]:
@@ -127,24 +129,36 @@ class WebRagPipeline:
         return evidence + extra
 
     async def run(self, query: str, source: str, max_tokens: int) -> WebAnswer:
-        stats = {"results": 0, "fetched": 0, "chunks": 0, "used": 0, "fallback": False}
+        stats = {
+            "results": 0, "fetched": 0, "chunks": 0, "used": 0, "fallback": False,
+            # Per-stage timings: without these, tuning end-to-end latency is
+            # guesswork about which stage is actually costing the seconds.
+            "search_ms": 0, "fetch_ms": 0, "rank_ms": 0, "llm_ms": 0,
+            "context_chars": 0,
+        }
 
+        t0 = time.perf_counter()
         try:
             results = await self.search.search(query, self.settings.search_results)
         except SearchError as exc:
             log.warning("search failed: %s", exc.message)
             raise InsufficientEvidence(exc.message) from exc
 
+        stats["search_ms"] = int((time.perf_counter() - t0) * 1000)
         stats["results"] = len(results)
         if not results:
             raise InsufficientEvidence("The search returned no results.")
 
         selected = self._select(results)
+        t1 = time.perf_counter()
         chunks = await self._gather_chunks(selected)
+        stats["fetch_ms"] = int((time.perf_counter() - t1) * 1000)
         stats["fetched"] = len({c.url for c in chunks})
         stats["chunks"] = len(chunks)
 
+        t2 = time.perf_counter()
         evidence = rank_chunks(query, chunks, self.settings)
+        stats["rank_ms"] = int((time.perf_counter() - t2) * 1000)
         if sum(len(e.text) for e in evidence) < self.settings.rag_min_evidence_chars:
             evidence = self._top_up_with_snippets(evidence, results)
             stats["fallback"] = True
@@ -154,13 +168,23 @@ class WebRagPipeline:
 
         stats["used"] = len(evidence)
 
-        answer = await self.llm.complete(
+        user_prompt = build_web_user_prompt(query, evidence)
+        stats["context_chars"] = len(user_prompt)
+
+        t3 = time.perf_counter()
+        completion = await self.llm.complete(
             web_system_prompt(source),
-            build_web_user_prompt(query, evidence),
+            user_prompt,
             max_tokens=max_tokens,
             temperature=self.settings.llm_temperature,
         )
-        return WebAnswer(answer=answer, evidence=evidence, stats=stats)
+        stats["llm_ms"] = int((time.perf_counter() - t3) * 1000)
+        return WebAnswer(
+            answer=completion.text,
+            evidence=evidence,
+            stats=stats,
+            truncated=completion.truncated,
+        )
 
 
 def rank_chunks(query: str, chunks: list[Chunk], settings: Settings) -> list[Evidence]:
