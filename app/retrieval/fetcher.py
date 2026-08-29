@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import socket
+import ssl
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
@@ -120,7 +121,7 @@ class PageFetcher:
 
                     body = b"".join(chunks)
                     encoding = resp.encoding or "utf-8"
-            except (httpx.HTTPError, ssl_error_types()) as exc:
+            except (httpx.HTTPError, ssl.SSLError) as exc:
                 log.debug("skip %s: %s", url, exc)
                 return None
 
@@ -145,9 +146,3 @@ class PageFetcher:
 
     async def aclose(self) -> None:
         await self._client.aclose()
-
-
-def ssl_error_types():  # pragma: no cover - trivial
-    import ssl
-
-    return ssl.SSLError

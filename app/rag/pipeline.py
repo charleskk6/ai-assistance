@@ -16,6 +16,7 @@ from app.rag.prompt import build_web_user_prompt, web_system_prompt
 from app.retrieval.chunker import Chunk, Evidence, chunk_text
 from app.retrieval.extractor import extract
 from app.retrieval.fetcher import PageFetcher
+from app.retrieval.ranker import rank
 from app.search.base import SearchError, SearchProvider, SearchResult
 from app.utils.logging import get_logger
 
@@ -163,8 +164,6 @@ class WebRagPipeline:
 
 
 def rank_chunks(query: str, chunks: list[Chunk], settings: Settings) -> list[Evidence]:
-    from app.retrieval.ranker import rank
-
     return rank(
         query,
         chunks,

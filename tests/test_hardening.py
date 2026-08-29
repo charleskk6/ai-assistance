@@ -128,3 +128,41 @@ def test_server_refuses_to_start_without_a_token():
 
     with pytest.raises(RuntimeError, match="LOCAL_ASSISTANT_TOKEN"):
         create_app(make_settings(local_assistant_token=""))
+
+
+def test_answer_that_shapes_down_to_nothing_is_reported_not_spoken_silently():
+    """A reply that is entirely a code block leaves no speech behind."""
+    from tests.conftest import ScriptedLLM
+
+    client = app_with(ScriptedLLM("```python\nprint('hi')\n```"))
+    r = client.post("/ask", json={"query": "show me code", "source": "siri"}, headers=AUTH)
+    assert r.status_code == 503
+    assert r.json()["error"] == "llm_empty"
+    assert r.json()["message"] == "今次答唔到你，唔該再問一次。"
+
+    # The same answer is fine for a caller that is not speaking it.
+    body = client.post(
+        "/ask", json={"query": "show me code", "source": "api"}, headers=AUTH
+    ).json()
+    assert "print('hi')" in body["answer"]
+
+
+def test_deadline_covers_time_spent_queueing():
+    """With one slot and a slow model, the second caller must time out rather
+    than wait for the first to finish plus its own full deadline."""
+    import threading
+
+    client = app_with(SlowLLM(), max_concurrent_requests=1, request_timeout_s=0.3)
+    results: list[int] = []
+
+    def call():
+        results.append(
+            client.post("/ask", json={"query": "hi"}, headers=AUTH).status_code
+        )
+
+    threads = [threading.Thread(target=call) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=10)
+    assert results == [504, 504]

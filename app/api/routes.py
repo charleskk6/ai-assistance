@@ -9,7 +9,13 @@ from fastapi import APIRouter, Depends, Request
 
 from app.api.deps import require_token
 from app.api.errors import error_response
-from app.api.schemas import AskRequest, AskResponse, HealthResponse, LLMHealthInfo, SourceRef
+from app.api.schemas import (
+    AskRequest,
+    AskResponse,
+    HealthResponse,
+    LLMHealthInfo,
+    SourceRef,
+)
 from app.llm.base import LLMError
 from app.rag.pipeline import InsufficientEvidence
 from app.rag.prompt import system_prompt
@@ -38,9 +44,11 @@ async def ask(req: AskRequest, request: Request):
     sources: list[SourceRef] = []
     try:
         # Bounded concurrency and one overall deadline: a request either answers
-        # or fails, it never hangs the Shortcut indefinitely.
-        async with request.app.state.limiter:
-            async with asyncio.timeout(settings.request_timeout_s):
+        # or fails, it never hangs the Shortcut indefinitely. The deadline wraps
+        # the semaphore, so time spent queueing behind another inference counts
+        # against it too.
+        async with asyncio.timeout(settings.request_timeout_s):
+            async with request.app.state.limiter:
                 answer, stats, sources = await _answer(req, decision, request, max_tokens)
     except TimeoutError:
         _log_failure(req, decision, "request_timeout", started)
@@ -56,6 +64,11 @@ async def ask(req: AskRequest, request: Request):
 
     if req.source == "siri":
         answer = to_speech_text(answer)
+        # An answer that was entirely code or markup shapes down to nothing, and
+        # a silent Shortcut looks like a crash. Say something instead.
+        if not answer:
+            _log_failure(req, decision, "llm_empty", started)
+            return error_response("llm_empty", "The answer was empty.", req.source)
 
     latency_ms = int((time.perf_counter() - started) * 1000)
     # Note the query is truncated and page bodies are never logged.
