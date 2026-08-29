@@ -14,10 +14,26 @@ ENV_FILE="${ENV_FILE:-.env}"
 # execute, and `source` silently gives up on CRLF line endings.
 # A blank "LOCAL_ASSISTANT_TOKEN=" is the placeholder .env.example ships with,
 # never a real value - so skip blanks and take the last assignment that has one.
+# Parsed with python3 (already required below for JSON): sed's \+ and \? are GNU
+# extensions that BSD sed on macOS treats as literal characters, which silently
+# made this find nothing at all.
 read_env_token() {
   [ -f "$ENV_FILE" ] || return 1
-  sed -n 's/\r$//; s/^[[:space:]]*\(export[[:space:]]\+\)\?LOCAL_ASSISTANT_TOKEN[[:space:]]*=[[:space:]]*//p' \
-    "$ENV_FILE" | sed 's/^["'"'"']//; s/["'"'"']$//' | grep -v '^[[:space:]]*$' | tail -n1
+  python3 - "$ENV_FILE" <<'PYEOF'
+import re, sys
+
+value = ""
+with open(sys.argv[1], encoding="utf-8", errors="replace") as handle:
+    for line in handle:
+        match = re.match(
+            r"\s*(?:export\s+)?LOCAL_ASSISTANT_TOKEN\s*=\s*(.*)", line.rstrip("\r\n")
+        )
+        if match:
+            candidate = match.group(1).strip().strip('"').strip("'")
+            if candidate:
+                value = candidate
+print(value)
+PYEOF
 }
 
 TOKEN="${2:-${LOCAL_ASSISTANT_TOKEN:-}}"
