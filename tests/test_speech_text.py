@@ -44,3 +44,38 @@ def test_truncates_on_sentence_boundary():
 
 def test_empty_input():
     assert to_speech_text("") == ""
+
+
+def test_drops_a_trailing_half_sentence():
+    """The model hits its token ceiling mid-thought; a voice must not read a
+    half-word."""
+    cut_off = "Dependency injection 係一種 design pattern。例如你有個 server object，佢需要一個 databa"
+    assert (
+        to_speech_text(cut_off, drop_trailing_fragment=True)
+        == "Dependency injection 係一種 design pattern。"
+    )
+    # Without the runtime's truncation signal, the text is left alone - plenty of
+    # complete answers simply end without punctuation.
+    assert to_speech_text(cut_off) == cut_off
+
+
+def test_keeps_a_complete_answer_untouched():
+    assert to_speech_text("全部完整。第二句都完整。") == "全部完整。第二句都完整。"
+    assert to_speech_text("This is complete.") == "This is complete."
+
+
+def test_does_not_trim_a_short_unpunctuated_reply():
+    assert to_speech_text("yes", drop_trailing_fragment=True) == "yes"
+    assert to_speech_text("3.14.7", drop_trailing_fragment=True) == "3.14.7"
+
+
+def test_does_not_gut_an_answer_whose_fragment_is_the_bulk():
+    """One early full stop then a long run-on: trimming would throw the answer
+    away, so leave it."""
+    text = "好。" + "x" * 200
+    assert to_speech_text(text, drop_trailing_fragment=True) == text
+
+
+def test_trailing_bracket_counts_as_a_finished_sentence():
+    text = "佢係一個 object（唔係 class）"
+    assert to_speech_text(text, drop_trailing_fragment=True) == text

@@ -31,10 +31,10 @@ git clone <this repo> && cd ai-assistance
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 
-# 3. Config
+# 3. Config - .env.example ships with a BLANK token, so generate one
 cp .env.example .env
-python3 -c "import secrets; print('LOCAL_ASSISTANT_TOKEN=' + secrets.token_urlsafe(32))"
-#    paste that line into .env
+python3 -c "import secrets; print('LOCAL_ASSISTANT_TOKEN=' + secrets.token_urlsafe(32))" >> .env
+#    (appending is fine: the later assignment wins over the blank one)
 
 # 4. Run
 ./run.sh

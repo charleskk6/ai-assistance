@@ -10,7 +10,7 @@ import re
 
 import httpx
 
-from app.llm.base import LLMError, LLMHealth, LLMProvider
+from app.llm.base import Completion, LLMError, LLMHealth, LLMProvider
 
 # Qwen3 and friends can emit a reasoning block. We ask them not to, but strip it
 # defensively so it can never reach Apple's text-to-speech.
@@ -57,7 +57,7 @@ class OllamaProvider(LLMProvider):
 
     async def complete(
         self, system: str, user: str, *, max_tokens: int, temperature: float
-    ) -> str:
+    ) -> Completion:
         payload = {
             "model": self.model,
             "messages": [
@@ -97,7 +97,7 @@ class OllamaProvider(LLMProvider):
         answer = strip_thinking(content)
         if not answer:
             raise LLMError("llm_empty", "The local model returned an empty answer.")
-        return answer
+        return Completion(answer, truncated=data.get("done_reason") == "length")
 
     async def health(self) -> LLMHealth:
         try:
@@ -141,8 +141,8 @@ class EchoProvider(LLMProvider):
 
     async def complete(
         self, system: str, user: str, *, max_tokens: int, temperature: float
-    ) -> str:
-        return f"[echo:{self.model}] {user.strip()[:max_tokens]}"
+    ) -> Completion:
+        return Completion(f"[echo:{self.model}] {user.strip()[:max_tokens]}")
 
     async def health(self) -> LLMHealth:
         return LLMHealth(

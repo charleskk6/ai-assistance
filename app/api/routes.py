@@ -49,7 +49,9 @@ async def ask(req: AskRequest, request: Request):
         # against it too.
         async with asyncio.timeout(settings.request_timeout_s):
             async with request.app.state.limiter:
-                answer, stats, sources = await _answer(req, decision, request, max_tokens)
+                answer, stats, sources, truncated = await _answer(
+                    req, decision, request, max_tokens
+                )
     except TimeoutError:
         _log_failure(req, decision, "request_timeout", started)
         return error_response(
@@ -63,7 +65,7 @@ async def ask(req: AskRequest, request: Request):
         return error_response(exc.code, exc.message, req.source)
 
     if req.source == "siri":
-        answer = to_speech_text(answer)
+        answer = to_speech_text(answer, drop_trailing_fragment=truncated)
         # An answer that was entirely code or markup shapes down to nothing, and
         # a silent Shortcut looks like a crash. Say something instead.
         if not answer:
@@ -74,7 +76,8 @@ async def ask(req: AskRequest, request: Request):
     # Note the query is truncated and page bodies are never logged.
     log.info(
         "ask route=%s source=%s model=%s reason=%r results=%d fetched=%d "
-        "chunks=%d used=%d fallback=%s latency_ms=%d query=%r",
+        "chunks=%d used=%d fallback=%s context_chars=%d "
+        "search_ms=%d fetch_ms=%d rank_ms=%d llm_ms=%d latency_ms=%d query=%r",
         decision.route,
         req.source,
         llm.model,
@@ -84,6 +87,11 @@ async def ask(req: AskRequest, request: Request):
         stats.get("chunks", 0),
         stats.get("used", 0),
         stats.get("fallback", False),
+        stats.get("context_chars", 0),
+        stats.get("search_ms", 0),
+        stats.get("fetch_ms", 0),
+        stats.get("rank_ms", 0),
+        stats.get("llm_ms", 0),
         latency_ms,
         req.query[:120],
     )
@@ -94,7 +102,7 @@ async def ask(req: AskRequest, request: Request):
 
 async def _answer(
     req: AskRequest, decision, request: Request, max_tokens: int
-) -> tuple[str, dict, list[SourceRef]]:
+) -> tuple[str, dict, list[SourceRef], bool]:
     """Run the chosen route. Raises; the caller turns errors into responses."""
     settings = request.app.state.settings
     llm = request.app.state.llm
@@ -103,19 +111,20 @@ async def _answer(
 
     if decision.route == "web":
         result = await request.app.state.rag.run(decision.query, req.source, max_tokens)
-        answer, stats = result.answer, result.stats
+        answer, stats, truncated = result.answer, result.stats, result.truncated
         sources = [
             SourceRef(title=s.title or s.domain, url=s.url, domain=s.domain)
             for s in result.sources
         ]
     else:
-        answer = await llm.complete(
+        completion = await llm.complete(
             system_prompt(req.source),
             decision.query,
             max_tokens=max_tokens,
             temperature=settings.llm_temperature,
         )
-    return answer, stats, sources
+        answer, truncated = completion.text, completion.truncated
+    return answer, stats, sources, truncated
 
 
 def _log_failure(req: AskRequest, decision, code: str, started: float) -> None:

@@ -24,8 +24,14 @@ _MULTI_NL_RE = re.compile(r"\n{2,}")
 _MULTI_SPACE_RE = re.compile(r"[ \t]{2,}")
 
 
-def to_speech_text(text: str, *, max_chars: int = 1200) -> str:
-    """Flatten Markdown-ish model output into something a TTS voice can read."""
+def to_speech_text(
+    text: str, *, max_chars: int = 1200, drop_trailing_fragment: bool = False
+) -> str:
+    """Flatten Markdown-ish model output into something a TTS voice can read.
+
+    Set `drop_trailing_fragment` when the runtime reported that the model was cut
+    off at its token ceiling; the unfinished last sentence is then removed.
+    """
     if not text:
         return ""
     out = _CODE_FENCE_RE.sub(" ", text)
@@ -51,11 +57,34 @@ def to_speech_text(text: str, *, max_chars: int = 1200) -> str:
         joined.append(line)
     out = " ".join(joined)
     out = _MULTI_SPACE_RE.sub(" ", _MULTI_NL_RE.sub(" ", out)).strip()
-    return _truncate_on_sentence(out, max_chars)
+    out = _truncate_on_sentence(out, max_chars)
+    return _end_on_sentence(out) if drop_trailing_fragment else out
 
 
 def _is_cjk(text: str) -> bool:
     return any("一" <= ch <= "鿿" for ch in text)
+
+
+_TERMINATORS = ".!?。！？…"
+
+
+def _end_on_sentence(text: str) -> str:
+    """Drop the unfinished last sentence of a cut-off answer.
+
+    A voice reading "…it needs a databa" sounds broken in a way a slightly
+    shorter answer does not. Only applied when the runtime said the model hit its
+    token ceiling, and only when a real answer survives the trim.
+    """
+    if not text or text[-1] in _TERMINATORS or text[-1] in "\"'）)】」』":
+        return text
+    cut = max(text.rfind(ch) for ch in _TERMINATORS)
+    kept = cut + 1
+    # Keep the trim only when a real answer survives it: enough text in absolute
+    # terms, and most of what the model wrote. Otherwise the fragment is the bulk
+    # of the answer and dropping it would leave nothing worth speaking.
+    if kept >= 40 and kept >= len(text) * 0.5:
+        return text[:kept]
+    return text
 
 
 def _truncate_on_sentence(text: str, max_chars: int) -> str:
