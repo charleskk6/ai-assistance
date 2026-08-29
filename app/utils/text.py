@@ -20,6 +20,23 @@ _BOLD_ITALIC_RE = re.compile(r"(\*{1,3}|_{1,3})(?=\S)(.+?)(?<=\S)\1", re.DOTALL)
 _BARE_URL_RE = re.compile(r"<?\bhttps?://\S+|\bwww\.\S+", re.IGNORECASE)
 _HR_RE = re.compile(r"^\s*([-*_])\1{2,}\s*$", re.MULTILINE)
 _CITATION_RE = re.compile(r"[\[(]\s*(?:source|來源|参考|參考)?\s*\d+\s*[\])]", re.IGNORECASE)
+# Prose citations the model reaches for despite being told not to. Removing the
+# connective too ("因為根據 Source 2 顯示，" -> "") keeps the sentence readable.
+_PROSE_CITATION_RES = [
+    re.compile(r"(?:因為)?根據(?:上述|以上)?\s*(?:Source|來源|资料|資料)\s*\d*\s*(?:顯示|显示|所述|指出)?\s*[，,]?\s*", re.IGNORECASE),
+    re.compile(r"(?:根據|按照)\s*(?:提供(?:嘅|的))?\s*(?:資料|资料|證據|证据|evidence)\s*[，,]?\s*"),
+    re.compile(r"[,]?\s*\b(?:as|according)\s+(?:stated\s+)?(?:in|to)\s+(?:the\s+)?(?:first|second|third|fourth|\d+(?:st|nd|rd|th)?)?\s*sources?\s*\d*", re.IGNORECASE),
+    # Only appositive use ("Source 2, the release is..."), never the subject of a
+    # sentence - deleting that leaves a verb with nothing in front of it.
+    re.compile(r"\bsources?\s*\d+\s*[,:，：]\s*", re.IGNORECASE),
+]
+
+# Deletions leave stranded punctuation: ", ." or a clause starting with a comma.
+_STRANDED_PUNCT_RES = [
+    (re.compile(r"\s+([,.，。!?！？])"), r"\1"),
+    (re.compile(r"([,，])\s*([.。!?！？])"), r"\2"),
+    (re.compile(r"(^|[.。!?！？]\s*)[,，、:：]+\s*"), r"\1"),
+]
 _MULTI_NL_RE = re.compile(r"\n{2,}")
 _MULTI_SPACE_RE = re.compile(r"[ \t]{2,}")
 
@@ -40,6 +57,8 @@ def to_speech_text(
     out = _MD_LINK_RE.sub(r"\1", out)          # keep link text, drop the target
     out = _BARE_URL_RE.sub("", out)            # never speak a URL
     out = _CITATION_RE.sub("", out)
+    for pattern in _PROSE_CITATION_RES:
+        out = pattern.sub("", out)
     out = _HEADING_RE.sub("", out)
     out = _BLOCKQUOTE_RE.sub("", out)
     out = _BULLET_RE.sub("", out)
@@ -56,6 +75,8 @@ def to_speech_text(
             joined[-1] += "。" if _is_cjk(joined[-1]) else "."
         joined.append(line)
     out = " ".join(joined)
+    for pattern, repl in _STRANDED_PUNCT_RES:
+        out = pattern.sub(repl, out)
     out = _MULTI_SPACE_RE.sub(" ", _MULTI_NL_RE.sub(" ", out)).strip()
     out = _truncate_on_sentence(out, max_chars)
     return _end_on_sentence(out) if drop_trailing_fragment else out

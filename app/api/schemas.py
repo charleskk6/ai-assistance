@@ -34,6 +34,9 @@ class AskResponse(BaseModel):
     route: Route
     sources: list[SourceRef] = []
     latency_ms: int
+    # Per-stage breakdown, so latency can be tuned without reading server logs.
+    # The Shortcut only ever reads "answer" and ignores this.
+    timings: dict[str, int] = {}
 
 
 class ErrorResponse(BaseModel):

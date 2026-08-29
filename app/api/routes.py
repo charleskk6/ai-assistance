@@ -96,7 +96,15 @@ async def ask(req: AskRequest, request: Request):
         req.query[:120],
     )
     return AskResponse(
-        answer=answer, route=decision.route, sources=sources, latency_ms=latency_ms
+        answer=answer,
+        route=decision.route,
+        sources=sources,
+        latency_ms=latency_ms,
+        timings={
+            k: stats[k]
+            for k in ("search_ms", "fetch_ms", "rank_ms", "llm_ms", "context_chars")
+            if k in stats
+        },
     )
 
 
