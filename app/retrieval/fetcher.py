@@ -131,17 +131,38 @@ class PageFetcher:
             text = body.decode("utf-8", errors="replace")
         return FetchedPage(url=str(url), html=text, content_type=ctype or "text/html")
 
-    async def fetch_many(self, urls: list[str]) -> list[FetchedPage]:
-        """Fetch concurrently; failures are dropped, not raised."""
-        results = await asyncio.gather(
-            *(self.fetch(u) for u in urls), return_exceptions=True
-        )
+    async def fetch_many(
+        self, urls: list[str], *, deadline_s: float | None = None
+    ) -> list[FetchedPage]:
+        """Fetch concurrently; failures are dropped, not raised.
+
+        With a deadline, stragglers are abandoned rather than waited for. One
+        slow server otherwise sets the floor for the whole request - gather()
+        finishes when the *slowest* page does, so a single site taking the full
+        per-request timeout costs that time even when the other three returned
+        immediately. Three good pages now beat four pages and a stall.
+        """
+        order = {url: i for i, url in enumerate(urls)}
+        tasks = {asyncio.create_task(self.fetch(url)): url for url in urls}
+
+        done, pending = await asyncio.wait(tasks.keys(), timeout=deadline_s)
+        for task in pending:
+            task.cancel()
+            log.debug("fetch abandoned at deadline: %s", tasks[task])
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
         pages: list[FetchedPage] = []
-        for url, res in zip(urls, results):
-            if isinstance(res, BaseException):
-                log.debug("fetch error %s: %s", url, res)
-            elif res is not None:
-                pages.append(res)
+        for task in done:
+            try:
+                page = task.result()
+            except BaseException as exc:  # noqa: BLE001 - a bad page is not fatal
+                log.debug("fetch error %s: %s", tasks[task], exc)
+                continue
+            if page is not None:
+                pages.append(page)
+        # asyncio.wait returns a set, so restore the search engine's ordering.
+        pages.sort(key=lambda page: order.get(page.url, len(order)))
         return pages
 
     async def aclose(self) -> None:

@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     fetch_timeout_s: float = 8.0
     fetch_max_bytes: int = 2_000_000  # hard cap; oversized responses are dropped
     fetch_concurrency: int = 4        # bounded, this is a fanless laptop
+    # Total wall-clock budget for the whole fetch batch. Stragglers are dropped:
+    # one slow server should not hold up an answer when the others have returned.
+    fetch_deadline_s: float = 4.0
     fetch_user_agent: str = "LocalAssistant/0.1 (personal use)"
     # Off by default: search results are attacker-influenceable, so fetching a
     # private address would let a poisoned result probe your LAN. Turn it on only

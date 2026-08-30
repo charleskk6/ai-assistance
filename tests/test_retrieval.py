@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
+
 import httpx
 import respx
 
@@ -15,7 +18,8 @@ URL = "https://example.com/page"
 
 def fetcher(**kw) -> PageFetcher:
     kw.setdefault("check_public", False)  # example.com does not resolve in CI
-    return PageFetcher(timeout_s=1, **kw)
+    kw.setdefault("timeout_s", 1)
+    return PageFetcher(**kw)
 
 
 # --- fetcher ---------------------------------------------------------------
@@ -208,3 +212,53 @@ def test_ranker_limits_chunks_from_one_domain():
 
 def test_ranker_on_empty_input():
     assert rank("anything", [], top_k=3, budget_chars=100) == []
+
+
+# --- fetch deadline --------------------------------------------------------
+@respx.mock
+async def test_one_slow_page_does_not_hold_up_the_others():
+    """gather() finishes when the SLOWEST page does; the deadline stops that."""
+
+    async def slow(request):
+        await asyncio.sleep(5)
+        return httpx.Response(200, html="<p>too late</p>")
+
+    respx.get("https://fast.com/a").mock(
+        return_value=httpx.Response(200, html="<p>quick</p>")
+    )
+    respx.get("https://fast.com/b").mock(
+        return_value=httpx.Response(200, html="<p>quick too</p>")
+    )
+    respx.get("https://slow.com/c").mock(side_effect=slow)
+
+    started = time.perf_counter()
+    pages = await fetcher(timeout_s=10).fetch_many(
+        ["https://fast.com/a", "https://fast.com/b", "https://slow.com/c"],
+        deadline_s=0.5,
+    )
+    elapsed = time.perf_counter() - started
+
+    assert elapsed < 2, f"waited {elapsed:.1f}s for a straggler"
+    assert [p.url for p in pages] == ["https://fast.com/a", "https://fast.com/b"]
+
+
+@respx.mock
+async def test_fetch_many_preserves_search_result_order():
+    """asyncio.wait returns a set; the engine's ranking must survive it."""
+    for path, delay in (("a", 0.05), ("b", 0.0), ("c", 0.02)):
+        async def handler(request, d=delay, p=path):
+            await asyncio.sleep(d)
+            return httpx.Response(200, html=f"<p>{p}</p>")
+
+        respx.get(f"https://ordered.com/{path}").mock(side_effect=handler)
+
+    urls = [f"https://ordered.com/{p}" for p in ("a", "b", "c")]
+    pages = await fetcher().fetch_many(urls, deadline_s=2)
+    assert [p.url for p in pages] == urls
+
+
+@respx.mock
+async def test_no_deadline_still_waits_for_everything():
+    respx.get("https://ok.com/a").mock(return_value=httpx.Response(200, html="<p>a</p>"))
+    pages = await fetcher().fetch_many(["https://ok.com/a"])
+    assert len(pages) == 1

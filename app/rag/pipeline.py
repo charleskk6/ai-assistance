@@ -77,7 +77,9 @@ class WebRagPipeline:
         return chosen
 
     async def _gather_chunks(self, selected: list[SearchResult]) -> list[Chunk]:
-        pages = await self.fetcher.fetch_many([r.url for r in selected])
+        pages = await self.fetcher.fetch_many(
+            [r.url for r in selected], deadline_s=self.settings.fetch_deadline_s
+        )
         by_url = {r.url: (i, r) for i, r in enumerate(selected)}
 
         chunks: list[Chunk] = []
