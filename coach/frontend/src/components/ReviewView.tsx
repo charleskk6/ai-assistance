@@ -39,7 +39,7 @@ export function ReviewView({ review, waiting, cloudEnabled, cloudProvider, onReq
         <h2>Session review</h2>
         <button className="ghost" onClick={onClose}>Back to conversation</button>
       </div>
-      {waiting && !review && <p className="muted">Analysing your session…</p>}
+      {waiting && !review && <p className="muted">Analysing your session and finding more natural ways to say things (local model, usually a few seconds)…</p>}
       {review && (
         <>
           <section>
@@ -73,7 +73,7 @@ export function ReviewView({ review, waiting, cloudEnabled, cloudProvider, onReq
                 {review.alternatives.map((a, i) => (
                   <li key={i}>
                     <div className="muted">“{a.original}”</div>
-                    <div>→ “{a.natural}” <span className="tag">{a.source}</span></div>
+                    <div>→ “{a.natural}” <span className="tag">{a.source === "rules" ? "correction" : a.source.startsWith("cloud") ? "more natural · cloud" : "more natural"}</span></div>
                   </li>
                 ))}
               </ul>
@@ -96,7 +96,7 @@ export function ReviewView({ review, waiting, cloudEnabled, cloudProvider, onReq
           <section>
             <h3>Deeper analysis</h3>
             <div className="row">
-              <button onClick={() => onRequest({ enrich: true })}>Re-analyse with the local model</button>
+              <button onClick={() => onRequest({ enrich: true })}>Analyse again with the local model</button>
             </div>
             {cloudEnabled ? (
               <div className="cloud-consent">

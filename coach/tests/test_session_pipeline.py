@@ -290,3 +290,17 @@ async def test_whisper_gets_the_coach_question_as_context():
 
 def test_word_overlap_is_fuzzy_for_misheard_echo():
     assert word_overlap("brillian that sound lovely", "Brilliant, that sounds lovely.") == 1.0
+
+
+async def test_review_suggests_more_natural_phrasing_for_correct_sentences():
+    review_json = ('{"mistakes": [], "alternatives": [{"original": "I am very tired today", '
+                   '"natural": "I\'m absolutely knackered today"}, {"original": "I invented this", "natural": "x"}]}')
+    llm = MockLLM(replies=["Oh no! Long day?", review_json])
+    sess, rec, _ = await new_session(llm=llm)
+    await sess.handle_json({"type": "text_input", "text": "I am very tired today"})
+    await wait_for(lambda: rec.of("assistant_done"))
+    await sess.handle_json({"type": "end_session", "enrich": True})
+    review = rec.of("review")[0]["review"]
+    assert {"original": "I am very tired today", "natural": "I'm absolutely knackered today", "source": "local-llm"} in review["alternatives"]
+    assert review["rejected_llm_items"] == 1  # the invented sentence is dropped
+    assert "even if grammatically correct" in llm.requests[-1][0]["content"]

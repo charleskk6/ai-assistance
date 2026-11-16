@@ -77,7 +77,7 @@ export default function App() {
               ) : (
                 <button className="danger" data-testid="stop" onClick={c.stop}>Stop</button>
               )}
-              <button className="ghost" onClick={() => requestReview({ enrich: false })} disabled={c.chat.length === 0}>End &amp; review</button>
+              <button className="ghost" onClick={() => requestReview({ enrich: true })} disabled={c.chat.length === 0}>End &amp; review</button>
               <MicMeter level={c.level} />
             </div>
             <Transcript chat={c.chat} partial={c.partial} />
