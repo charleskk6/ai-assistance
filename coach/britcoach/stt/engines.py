@@ -22,10 +22,11 @@ class FasterWhisperSTT(STTBackend):
 
     name = "faster_whisper"
 
-    def __init__(self, model: str, models_dir: Path, threads: int = 4) -> None:
+    def __init__(self, model: str, models_dir: Path, threads: int = 4, beam_size: int = 1) -> None:
         self.model_name = model
         self.models_dir = models_dir
         self.threads = threads
+        self.beam_size = beam_size
         self._model = None
 
     def load(self) -> None:
@@ -40,15 +41,17 @@ class FasterWhisperSTT(STTBackend):
             raise RuntimeError(f"Whisper model '{self.model_name}' is not installed at {local} and could not be "
                                f"downloaded ({type(e).__name__}). Run: .venv/bin/python scripts/setup_models.py") from e
 
-    def _transcribe(self, audio: np.ndarray) -> str:
+    def _transcribe(self, audio: np.ndarray, prompt: str = "") -> str:
         segments, _ = self._model.transcribe(
-            audio, language="en", beam_size=1, best_of=1, temperature=0.0,
+            audio, language="en", beam_size=self.beam_size, best_of=1, temperature=0.0,
             condition_on_previous_text=False, without_timestamps=True, vad_filter=False,
+            initial_prompt=prompt or None,
         )
         return " ".join(s.text.strip() for s in segments)
 
     def info(self) -> dict:
-        return {"backend": self.name, "model": self.model_name, "device": "cpu-int8", "threads": self.threads}
+        return {"backend": self.name, "model": self.model_name, "device": "cpu-int8", "threads": self.threads,
+                "beam_size": self.beam_size}
 
 
 class WhisperCppSTT(STTBackend):
@@ -73,8 +76,11 @@ class WhisperCppSTT(STTBackend):
                             models_dir=str(self.models_dir / "stt"), n_threads=self.threads,
                             print_progress=False, print_realtime=False, redirect_whispercpp_logs_to=None)
 
-    def _transcribe(self, audio: np.ndarray) -> str:
-        segments = self._model.transcribe(audio, language="en", no_context=True, single_segment=True)
+    def _transcribe(self, audio: np.ndarray, prompt: str = "") -> str:
+        params = {"language": "en", "no_context": True, "single_segment": True}
+        if prompt:
+            params["initial_prompt"] = prompt
+        segments = self._model.transcribe(audio, **params)
         return " ".join(s.text.strip() for s in segments)
 
     def info(self) -> dict:
@@ -90,6 +96,7 @@ class MockSTT(STTBackend):
         self.script = deque(script or [])
         self.latency_s = latency_s
         self.calls = 0
+        self.prompts: list[str] = []
 
     def load(self) -> None:
         pass
@@ -103,9 +110,10 @@ class MockSTT(STTBackend):
     def peek(self) -> str:
         return self.script[0] if self.script else "Hello there"
 
-    def _transcribe(self, audio: np.ndarray) -> str:
+    def _transcribe(self, audio: np.ndarray, prompt: str = "") -> str:
         import time
 
+        self.prompts.append(prompt)
         self.calls += 1
         if self.latency_s:
             time.sleep(self.latency_s)
@@ -117,9 +125,9 @@ class MockSTT(STTBackend):
             self.script.popleft()
 
 
-def create_stt(backend: str, model: str, models_dir: Path, threads: int) -> STTBackend:
+def create_stt(backend: str, model: str, models_dir: Path, threads: int, beam_size: int = 1) -> STTBackend:
     if backend == "faster_whisper":
-        return FasterWhisperSTT(model, models_dir, threads)
+        return FasterWhisperSTT(model, models_dir, threads, beam_size)
     if backend == "whispercpp":
         return WhisperCppSTT(model, models_dir, threads)
     if backend == "mock":

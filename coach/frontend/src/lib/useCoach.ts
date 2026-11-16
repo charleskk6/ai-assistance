@@ -106,6 +106,13 @@ export function useCoach() {
         case "cloud_correction":
           setChat((c) => c.map((x) => (x.role === "user" && x.text === m.text ? { ...x, issues: [...(x.issues || []), ...m.issues] } : x)));
           break;
+        case "echo_suspected":
+          setErrors((e) => [
+            ...e.slice(-4),
+            `The coach seems to have heard its own voice ("${m.heard}") and stopped. Interruptions are now set to ` +
+              `"Laptop speakers" (echo-checked). Use headphones for the snappiest conversation.`,
+          ]);
+          break;
         case "cloud_error":
         case "error":
           setErrors((e) => [...e.slice(-4), m.message]);

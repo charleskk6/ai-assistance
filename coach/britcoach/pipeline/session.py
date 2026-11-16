@@ -49,10 +49,21 @@ SendBytes = Callable[[bytes], Awaitable[None]]
 
 
 def word_overlap(a: str, b: str) -> float:
-    """Share of the words in ``a`` that also occur in ``b`` (echo detection)."""
+    """Share of the words in ``a`` that also occur in ``b`` (echo detection).
+
+    Fuzzy per word, because Whisper often mis-spells what it overhears from the speakers
+    ("brilliant" -> "brillian")."""
+    from difflib import SequenceMatcher
+
     wa = re.findall(r"[a-z']+", a.lower())
     wb = set(re.findall(r"[a-z']+", b.lower()))
-    return sum(1 for w in wa if w in wb) / len(wa) if wa else 0.0
+    if not wa:
+        return 0.0
+
+    def seen(w: str) -> bool:
+        return w in wb or (len(w) > 3 and any(SequenceMatcher(None, w, x).ratio() >= 0.8 for x in wb))
+
+    return sum(1 for w in wa if seen(w)) / len(wa)
 
 
 @dataclass
@@ -139,6 +150,7 @@ class Session:
         self._bg: set[asyncio.Task] = set()
         self._started_store = False
         self._pending_bargein_metrics: TurnMetrics | None = None
+        self._echo_ref: tuple[str, float] | None = None
 
     # ================================================================== helpers
     def _spawn(self, coro) -> asyncio.Task:
@@ -315,6 +327,9 @@ class Session:
         rt = self.response
         if rt is None:
             return
+        # Remember what the coach was saying: if the "interruption" turns out to be the coach's
+        # own voice picked up by the mic, we can tell when the transcript arrives.
+        self._echo_ref = (" ".join(rt.sentences[-3:]), time.perf_counter())
         await self._cancel_response("barge-in", unheard_merge=True)
         m = TurnMetrics(turn_id=rt.id, kind="barge_in", bargein_detect_ms=ms(detect_s),
                         bargein_cancel_ms=ms(time.perf_counter() - t_confirm))
@@ -347,7 +362,8 @@ class Session:
     def _on_silence(self, ev: SilenceReached) -> None:
         # Speculatively start the final transcription during the end-of-turn wait.
         loop = asyncio.get_running_loop()
-        fut = loop.run_in_executor(self.engines.stt_executor, self.engines.stt.transcribe, ev.audio, False)
+        fut = loop.run_in_executor(self.engines.stt_executor, self.engines.stt.transcribe, ev.audio, False,
+                                   self._stt_prompt())
         self._spec = (fut, ev.voiced_frames)
 
     async def _partials_loop(self) -> None:
@@ -361,7 +377,8 @@ class Session:
                 audio = self.detector.current_audio()
                 if len(audio) < 8000:
                     continue
-                res = await loop.run_in_executor(self.engines.stt_executor, self.engines.stt.transcribe, audio[-16000 * 12:], False)
+                res = await loop.run_in_executor(self.engines.stt_executor, self.engines.stt.transcribe, audio[-16000 * 12:], False,
+                                                 self._stt_prompt())
                 if res.text and self.detector.state is TState.SPEECH:
                     await self._emit({"type": "partial_transcript", "text": res.text})
         except asyncio.CancelledError:
@@ -401,7 +418,8 @@ class Session:
         else:
             if spec:
                 spec[0].cancel()
-            res = await loop.run_in_executor(self.engines.stt_executor, self.engines.stt.transcribe, ev.audio, True)
+            res = await loop.run_in_executor(self.engines.stt_executor, self.engines.stt.transcribe, ev.audio, True,
+                                             self._stt_prompt())
             m.stt_speculative_hit = False
         m.stt_wait_ms = ms(time.perf_counter() - t0)
         m.stt_compute_ms = ms(res.latency_s)
@@ -410,7 +428,35 @@ class Session:
             await self._emit({"type": "partial_transcript", "text": ""})
             await self._set_state("speaking" if self._ai_audible() else "listening")
             return
+        if self._is_own_echo(res.text):
+            return
         await self._on_user_text(res.text, m, speech_end_wall)
+
+    def _stt_prompt(self) -> str:
+        """The coach's last sentence, as context for Whisper (helps with topic words)."""
+        if not self.s.stt_context_prompt:
+            return ""
+        last = next((t.text for t in reversed(self.conv.turns) if t.role == "assistant"), "")
+        sentences = re.split(r"(?<=[.!?])\s+", last.rstrip(" —"))
+        return sentences[-1][-200:] if sentences else ""
+
+    def _is_own_echo(self, text: str) -> bool:
+        """Headphones mode cuts the coach off instantly. If what 'interrupted' it was really the
+        coach's own voice from the speakers, drop it and switch to the echo-checked mode."""
+        ref, self._echo_ref = self._echo_ref, None
+        if not ref or time.perf_counter() - ref[1] > 15 or len(text.split()) < 3:
+            return False
+        overlap = word_overlap(text, ref[0])
+        if overlap < self.s.echo_similarity_threshold:
+            return False
+        self._pending_prefix = ""
+        if self.barge_in_mode == "headphones":
+            self.barge_in_mode = "speakers"
+        self._spawn(self._emit({"type": "echo_suspected", "heard": text, "overlap": round(overlap, 2),
+                                "barge_in_mode": self.barge_in_mode}))
+        self._spawn(self._emit({"type": "config", "config": self.public_config()}))
+        self._spawn(self._set_state("listening"))
+        return True
 
     # ================================================================== turns
     async def _on_user_text(self, text: str, m: TurnMetrics, speech_end_wall: float | None = None) -> None:
@@ -498,12 +544,15 @@ class Session:
         splitter = SentenceSplitter(first_chunk_min_chars=self.s.tts_first_chunk_min_chars)
         think = ThinkFilter()
         first = True
+        truncated = False
+        queued = 0
         try:
             async for chunk in llm.stream(messages, params, rt.cancel):
                 if rt.cancel.cancelled:
                     break
                 if chunk.done:
                     st = chunk.stats or {}
+                    truncated = bool(st.get("truncated"))
                     m.llm_ttft_ms = ms(st.get("ttft_s"))
                     m.llm_tokens = st.get("generated_tokens")
                     tps = st.get("tokens_per_s")
@@ -524,9 +573,15 @@ class Session:
                             m.first_sentence_ms = ms(time.perf_counter() - rt.t_request)
                             first = False
                         await queue.put(sentence)
+                        queued += 1
             tail = think.flush()
             rt.full_text += tail
-            for sentence in splitter.push(tail) + splitter.flush():
+            rest = splitter.push(tail) + splitter.flush()
+            if truncated and rest and queued + len(rest) > 1 and not re.search(r"[.!?…][\"')\]]*$", rest[-1].strip()):
+                # The model hit the token limit mid-sentence: don't speak half a sentence.
+                m.extra["dropped_fragment"] = rest.pop()
+                await self._emit({"type": "assistant_truncated", "turn_id": rt.id, "dropped": m.extra["dropped_fragment"]})
+            for sentence in rest:
                 sentence = clean_for_speech(sentence)
                 if sentence and not rt.cancel.cancelled:
                     if first:

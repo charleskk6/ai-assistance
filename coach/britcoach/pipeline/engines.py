@@ -57,7 +57,7 @@ class Engines:
 
         async def load_stt() -> None:
             if self.stt is None:
-                self.stt = create_stt(s.stt_backend, s.stt_model, models_dir, s.stt_threads)
+                self.stt = create_stt(s.stt_backend, s.stt_model, models_dir, s.stt_threads, s.stt_beam_size)
             await loop.run_in_executor(self.stt_executor, self.stt.load)
             if warmup:
                 await loop.run_in_executor(self.stt_executor, self.stt.warmup)

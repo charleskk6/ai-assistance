@@ -39,7 +39,8 @@ class MockLLM(LLMBackend):
         text = self._reply(messages)
         t0 = time.perf_counter()
         await asyncio.sleep(self.ttft_s)
-        words = re.findall(r"\S+\s*", text)[: params.max_tokens]
+        all_words = re.findall(r"\S+\s*", text)
+        words = all_words[: params.max_tokens]
         n = 0
         completed = False
         try:
@@ -56,5 +57,5 @@ class MockLLM(LLMBackend):
         dt = time.perf_counter() - t0
         yield LLMChunk(text="", done=True, stats={
             "generated_tokens": n, "ttft_s": self.ttft_s, "tokens_per_s": n / dt if dt else None,
-            "cancelled": cancel.cancelled,
+            "cancelled": cancel.cancelled, "truncated": len(all_words) > params.max_tokens,
         })

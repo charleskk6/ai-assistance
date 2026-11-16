@@ -83,6 +83,12 @@ the app only has a speech-recognition transcript.
 > Whisper's language model sometimes "corrects" grammar while transcribing, so some real mistakes never reach the
 > transcript. The detector favours precision: a false correction is worse than a missed one.
 
+## If Whisper mishears you
+
+* Raise **Pause before the coach replies** (UI slider) to 800–900 ms if you pause mid-sentence; otherwise your turn ends early and only half of it is transcribed.
+* Try `COACH_STT_MODEL=small.en` (more accurate, slower) and/or `COACH_STT_BEAM_SIZE=5`, then re-run the benchmark to see the latency cost on your Mac.
+* Check the mic level meter moves well when you speak; a quiet or distant mic hurts accuracy.
+
 ## Interruptions and echo
 
 When the coach speaks through the MacBook speakers, the microphone hears it. The app offers three modes (in settings):
@@ -107,6 +113,9 @@ Model profiles and voices are in `config/models.toml`.
 | `COACH_LLM_BACKEND` | `mlx` | `mlx`, `ollama`, `openai_compat`, `mock` |
 | `COACH_LLM_PROFILE` | `medium` | `small` 1.5B · `medium` 3B/4B · `large` 7B/8B |
 | `COACH_STT_BACKEND` / `_MODEL` | `faster_whisper` / `base.en` | `whispercpp`; `tiny.en` for speed, `small.en` for accuracy |
+| `COACH_STT_BEAM_SIZE` | `1` | `5` is more accurate (faster-whisper) at extra decode time |
+| `COACH_STT_CONTEXT_PROMPT` | `true` | Gives Whisper the coach's last sentence as context |
+| `COACH_LLM_MAX_TOKENS` | `160` | Safety cap; if a reply hits it mid-sentence, the half-sentence isn't spoken |
 | `COACH_TTS_BACKEND` / `_VOICE` | `piper` / `en_GB-cori-medium` | `macos_say` / `Daniel` |
 | `COACH_END_OF_TURN_MS` | `560` | Silence that ends your turn: the biggest single latency lever |
 | `COACH_BARGE_IN_MODE` | `headphones` | `speakers`, `off` |
@@ -129,7 +138,8 @@ Set `COACH_OPENAI_MODEL` to an OpenAI model you have access to.
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest              # 89 tests, ~5 s, no model weights needed
+.venv/bin/python -m pytest              # 94 tests, ~5 s, no model weights needed
+node --test frontend/tests/*.test.mjs    # microphone resampler (anti-aliasing) tests
 ./scripts/e2e_browser.sh                # headless Chromium + fake microphone + real Silero VAD
 ```
 

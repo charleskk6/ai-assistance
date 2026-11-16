@@ -142,6 +142,7 @@ class MLXBackend(LLMBackend):
             "prompt_tps": getattr(last, "prompt_tps", None),
             "peak_memory_gb": getattr(last, "peak_memory", None),
             "cancelled": cancel.cancelled,
+            "truncated": getattr(last, "finish_reason", None) == "length",
         }
         self.last_stats = stats
         yield LLMChunk(text="", done=True, stats=stats)

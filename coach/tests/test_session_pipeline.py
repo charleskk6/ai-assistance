@@ -239,3 +239,54 @@ async def test_barge_in_after_reply_fully_generated_marks_interrupted():
     assert rec.of("stop_audio")[0]["turn_id"] == tid
     last_ai = [t for t in sess.conv.turns if t.role == "assistant"][-1]
     assert last_ai.interrupted
+
+
+async def test_reply_cut_by_token_limit_does_not_speak_half_a_sentence():
+    s = make_settings(llm_max_tokens=12)
+    reply = "Oh, lovely to hear from you. I was wondering whether you had managed to get to the park"
+    sess, rec, _ = await new_session(settings=s, llm=MockLLM(replies=[reply]))
+    await sess.handle_json({"type": "text_input", "text": "hello"})
+    await wait_for(lambda: rec.of("assistant_done"))
+    spoken = [m["text"] for m in rec.of("assistant_sentence")]
+    assert spoken == ["Oh, lovely to hear from you."]
+    assert rec.of("assistant_truncated")[0]["dropped"].startswith("I was wondering")
+    assert [t.text for t in sess.conv.turns if t.role == "assistant"][-1] == "Oh, lovely to hear from you."
+
+
+async def test_short_truncated_reply_is_still_spoken():
+    # If the only sentence is cut off, saying something beats silence.
+    s = make_settings(llm_max_tokens=4)
+    sess, rec, _ = await new_session(settings=s, llm=MockLLM(replies=["I was wondering whether you had been"]))
+    await sess.handle_json({"type": "text_input", "text": "hello"})
+    await wait_for(lambda: rec.of("assistant_done"))
+    assert [m["text"] for m in rec.of("assistant_sentence")] == ["I was wondering whether"]
+
+
+async def test_headphones_mode_detects_coach_hearing_itself():
+    reply = "Brilliant, that sounds like a lovely day out with the kids. " * 3
+    stt = MockSTT(["We went to the beach", "sounds like a lovely day out"])
+    sess, rec, _ = await new_session(llm=MockLLM(replies=[reply]), stt=stt)
+    await speak(sess)
+    await wait_for(lambda: rec.audio)
+    tid = unpack_audio(rec.audio[0])[0]
+    await sess.handle_json({"type": "playback", "event": "started", "turn_id": tid})
+    await speak(sess, n_speech=6)  # the coach's own voice from the speakers
+    await wait_for(lambda: rec.of("echo_suspected"))
+    assert rec.of("stop_audio")  # headphones mode stops first...
+    assert sess.barge_in_mode == "speakers"  # ...then switches to the echo-checked mode
+    assert rec.of("config")[-1]["config"]["barge_in_mode"] == "speakers"
+    assert [t.text for t in sess.conv.user_turns()] == ["We went to the beach"]  # echo not taken as user speech
+
+
+async def test_whisper_gets_the_coach_question_as_context():
+    stt = MockSTT(["I usually go swimming"])
+    sess, rec, _ = await new_session(stt=stt)  # last coach line: "Hello! How are you?"
+    await speak(sess)
+    await wait_for(lambda: rec.of("user_final"))
+    assert stt.prompts and all(p == "How are you?" for p in stt.prompts)
+    sess.s.stt_context_prompt = False
+    assert sess._stt_prompt() == ""
+
+
+def test_word_overlap_is_fuzzy_for_misheard_echo():
+    assert word_overlap("brillian that sound lovely", "Brilliant, that sounds lovely.") == 1.0

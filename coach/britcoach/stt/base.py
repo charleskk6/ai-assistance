@@ -48,11 +48,13 @@ class STTBackend(ABC):
     def load(self) -> None: ...
 
     @abstractmethod
-    def _transcribe(self, audio: np.ndarray) -> str: ...
+    def _transcribe(self, audio: np.ndarray, prompt: str = "") -> str: ...
 
-    def transcribe(self, audio: np.ndarray, final: bool = True) -> STTResult:
+    def transcribe(self, audio: np.ndarray, final: bool = True, prompt: str = "") -> STTResult:
+        """``prompt``: recent conversation text (e.g. the coach's last question). Whisper uses it
+        as context, which helps with names and topic words."""
         t0 = time.perf_counter()
-        text = clean_transcript(self._transcribe(audio.astype(np.float32))) if len(audio) else ""
+        text = clean_transcript(self._transcribe(audio.astype(np.float32), prompt)) if len(audio) else ""
         if final:
             self.on_final(text)
         return STTResult(text=text, audio_s=len(audio) / 16000, latency_s=time.perf_counter() - t0)

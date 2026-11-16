@@ -71,6 +71,7 @@ class OllamaBackend(LLMBackend):
             "ttft_s": (first - t0) if first else None,
             "tokens_per_s": (final.get("eval_count", 0) / (eval_ns / 1e9)) if eval_ns else None,
             "cancelled": cancel.cancelled,
+            "truncated": final.get("done_reason") == "length",
         }
         yield LLMChunk(text="", done=True, stats=stats)
 
@@ -97,6 +98,7 @@ class OpenAICompatBackend(LLMBackend):
         t0 = time.perf_counter()
         first = None
         n = 0
+        finish = None
         async with self._client.stream("POST", "/chat/completions", json=body) as resp:
             resp.raise_for_status()
             async for line in resp.aiter_lines():
@@ -110,6 +112,7 @@ class OpenAICompatBackend(LLMBackend):
                 data = json.loads(payload)
                 choices = data.get("choices") or []
                 piece = (choices[0].get("delta", {}).get("content") or "") if choices else ""
+                finish = (choices[0].get("finish_reason") if choices else None) or finish
                 if piece:
                     first = first or time.perf_counter()
                     n += 1
@@ -120,5 +123,6 @@ class OpenAICompatBackend(LLMBackend):
             "ttft_s": (first - t0) if first else None,
             "tokens_per_s": (n / dt) if first and dt > 0 else None,
             "cancelled": cancel.cancelled,
+            "truncated": finish == "length",
         }
         yield LLMChunk(text="", done=True, stats=stats)

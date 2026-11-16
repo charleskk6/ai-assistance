@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     llm_backend: LLMBackendName = "mlx"
     llm_profile: Literal["small", "medium", "large"] = "medium"
     llm_model: str = ""  # overrides the profile's model id for the chosen backend
-    llm_max_tokens: int = 110  # ~ three short spoken sentences
+    llm_max_tokens: int = 160  # room to finish a sentence; brevity is enforced by the prompt
     llm_temperature: float = 0.7
     llm_top_p: float = 0.9
     mlx_prompt_cache: bool = True  # reuse the KV cache for the shared prompt prefix
@@ -60,6 +60,8 @@ class Settings(BaseSettings):
     stt_backend: STTBackendName = "faster_whisper"
     stt_model: str = "base.en"
     stt_threads: int = 4
+    stt_beam_size: int = 1  # 5 is more accurate (faster-whisper), at extra decode time
+    stt_context_prompt: bool = True  # give Whisper the coach's last sentence as context
     stt_partials: bool = True
     stt_partial_interval_ms: int = 700
     stt_speculative_ms: int = 240  # start the final transcription after this much silence
