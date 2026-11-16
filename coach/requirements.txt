@@ -1,0 +1,18 @@
+# Core server
+fastapi>=0.115
+uvicorn[standard]>=0.32
+pydantic>=2.9
+pydantic-settings>=2.6
+httpx>=0.27
+numpy>=1.26
+psutil>=5.9
+# VAD (Silero ONNX model is fetched by scripts/setup_models.py; no torch needed)
+onnxruntime>=1.18
+# Speech-to-text (pick one; both are installed by default, MIT licensed)
+faster-whisper>=1.1
+pywhispercpp>=1.3
+# Model downloads
+huggingface_hub>=0.25
+# Optional cloud analysis (only used when explicitly enabled)
+anthropic>=2.0
+openai>=1.50
