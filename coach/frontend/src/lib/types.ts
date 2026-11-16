@@ -18,6 +18,7 @@ export interface ChatItem {
   strategy?: string;
   interrupted?: boolean;
   heard?: string;
+  dropped?: string; // cut off by the length limit and not spoken
   pending?: boolean;
 }
 

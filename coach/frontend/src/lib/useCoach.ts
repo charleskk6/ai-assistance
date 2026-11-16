@@ -80,6 +80,9 @@ export function useCoach() {
             ),
           );
           break;
+        case "assistant_truncated":
+          setChat((c) => c.map((x) => (x.role === "assistant" && x.turnId === m.turn_id ? { ...x, dropped: m.dropped } : x)));
+          break;
         case "barge_in":
           setLastBargeIn(m.metrics);
           break;

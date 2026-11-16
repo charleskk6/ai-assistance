@@ -46,7 +46,10 @@ class Settings(BaseSettings):
     llm_backend: LLMBackendName = "mlx"
     llm_profile: Literal["small", "medium", "large"] = "medium"
     llm_model: str = ""  # overrides the profile's model id for the chosen backend
-    llm_max_tokens: int = 160  # room to finish a sentence; brevity is enforced by the prompt
+    # Soft cap on *visible* reply tokens: once reached, generation stops at the next sentence end.
+    llm_max_tokens: int = 160
+    # Extra tokens allowed past the soft cap to finish the current sentence (hard cap = sum of both).
+    llm_finish_sentence_tokens: int = 80
     llm_temperature: float = 0.7
     llm_top_p: float = 0.9
     mlx_prompt_cache: bool = True  # reuse the KV cache for the shared prompt prefix

@@ -40,6 +40,12 @@ export function Transcript({ chat, partial }: { chat: ChatItem[]; partial: strin
                 <span className="cut">{m.text.slice(m.heard.length)}</span>
                 <span className="tag">interrupted</span>
               </>
+            ) : m.dropped && m.text.trimEnd().endsWith(m.dropped.trim()) ? (
+              <>
+                {m.text.trimEnd().slice(0, m.text.trimEnd().length - m.dropped.trim().length)}
+                <span className="cut" title="Not spoken: the reply hit the length limit mid-sentence">{m.dropped}</span>
+                <span className="tag">not spoken</span>
+              </>
             ) : (
               m.text
             )}

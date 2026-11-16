@@ -72,6 +72,7 @@ class ResponseTurn:
     kind: str
     metrics: TurnMetrics
     cancel: CancelToken = field(default_factory=CancelToken)
+    llm_cancel: CancelToken = field(default_factory=CancelToken)  # also used to stop at a sentence end
     task: asyncio.Task | None = None
     t_request: float = 0.0
     speech_end_wall: float | None = None
@@ -507,7 +508,8 @@ class Session:
             await self._set_state("thinking")
             messages = self.conv.build_messages()
             llm = self.engines.llm
-            params = GenParams(max_tokens=self.s.llm_max_tokens, temperature=self.s.llm_temperature, top_p=self.s.llm_top_p)
+            params = GenParams(max_tokens=self.s.llm_max_tokens + self.s.llm_finish_sentence_tokens,
+                               temperature=self.s.llm_temperature, top_p=self.s.llm_top_p)
             queue: asyncio.Queue = asyncio.Queue(maxsize=3)
             rt.t_request = time.perf_counter()
 
@@ -546,8 +548,11 @@ class Session:
         first = True
         truncated = False
         queued = 0
+        visible = 0  # visible pieces (~tokens); hidden <think> output doesn't count
+        soft_cap = self.s.llm_max_tokens
+        stream = llm.stream(messages, params, rt.llm_cancel)
         try:
-            async for chunk in llm.stream(messages, params, rt.cancel):
+            async for chunk in stream:
                 if rt.cancel.cancelled:
                     break
                 if chunk.done:
@@ -564,6 +569,7 @@ class Session:
                 piece = think.push(chunk.text)
                 if not piece:
                     continue
+                visible += 1
                 rt.full_text += piece
                 await self._emit({"type": "assistant_delta", "turn_id": rt.id, "text": piece})
                 for sentence in splitter.push(piece):
@@ -574,6 +580,12 @@ class Session:
                             first = False
                         await queue.put(sentence)
                         queued += 1
+                if visible >= soft_cap and queued and not splitter.pending():
+                    # Long enough, and we're exactly at a sentence end: stop here cleanly.
+                    m.extra["stopped_at_sentence_end"] = True
+                    m.llm_tokens = visible
+                    rt.llm_cancel.cancel("soft cap reached at sentence end")
+                    break
             tail = think.flush()
             rt.full_text += tail
             rest = splitter.push(tail) + splitter.flush()
@@ -589,6 +601,7 @@ class Session:
                         first = False
                     await queue.put(sentence)
         finally:
+            await stream.aclose()  # make sure an early exit stops generation
             await queue.put(None)
 
     async def _speak(self, rt: ResponseTurn, queue: asyncio.Queue) -> None:
@@ -637,6 +650,7 @@ class Session:
             return
         self.response = None
         rt.cancel.cancel(reason)
+        rt.llm_cancel.cancel(reason)
         heard = rt.heard_text(now) if (rt.first_audio_sent or rt.play_start) else ""
         await self._emit({"type": "stop_audio", "turn_id": rt.id, "reason": reason, "heard": heard})
         if rt.task and not rt.task.done():

@@ -32,6 +32,10 @@ class SentenceSplitter:
             out.append(piece)
         return out
 
+    def pending(self) -> str:
+        """Text received but not yet emitted (a sentence still in progress)."""
+        return self._buf.strip()
+
     def flush(self) -> list[str]:
         rest = self._buf.strip()
         self._buf = ""

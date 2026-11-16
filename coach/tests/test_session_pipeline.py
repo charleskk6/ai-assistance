@@ -242,7 +242,7 @@ async def test_barge_in_after_reply_fully_generated_marks_interrupted():
 
 
 async def test_reply_cut_by_token_limit_does_not_speak_half_a_sentence():
-    s = make_settings(llm_max_tokens=12)
+    s = make_settings(llm_max_tokens=12, llm_finish_sentence_tokens=0)
     reply = "Oh, lovely to hear from you. I was wondering whether you had managed to get to the park"
     sess, rec, _ = await new_session(settings=s, llm=MockLLM(replies=[reply]))
     await sess.handle_json({"type": "text_input", "text": "hello"})
@@ -255,7 +255,7 @@ async def test_reply_cut_by_token_limit_does_not_speak_half_a_sentence():
 
 async def test_short_truncated_reply_is_still_spoken():
     # If the only sentence is cut off, saying something beats silence.
-    s = make_settings(llm_max_tokens=4)
+    s = make_settings(llm_max_tokens=4, llm_finish_sentence_tokens=0)
     sess, rec, _ = await new_session(settings=s, llm=MockLLM(replies=["I was wondering whether you had been"]))
     await sess.handle_json({"type": "text_input", "text": "hello"})
     await wait_for(lambda: rec.of("assistant_done"))
@@ -304,3 +304,20 @@ async def test_review_suggests_more_natural_phrasing_for_correct_sentences():
     assert {"original": "I am very tired today", "natural": "I'm absolutely knackered today", "source": "local-llm"} in review["alternatives"]
     assert review["rejected_llm_items"] == 1  # the invented sentence is dropped
     assert "even if grammatically correct" in llm.requests[-1][0]["content"]
+
+
+async def test_soft_cap_finishes_the_sentence_then_stops():
+    # The reported case: the cap fell inside the final question, so the voice stopped early.
+    reply = ('Sorry, I meant to say: "I reckon you\'re picking up the rhythm now - how about we plan a family '
+             'weekend together?" So, where\'s the nearest countryside spot you\'d fancy? And another thing entirely.')
+    s = make_settings(llm_max_tokens=25, llm_finish_sentence_tokens=20)  # cap lands inside the question
+    llm = MockLLM(replies=[reply])
+    sess, rec, _ = await new_session(settings=s, llm=llm)
+    await sess.handle_json({"type": "text_input", "text": "hello"})
+    await wait_for(lambda: rec.of("assistant_done"))
+    spoken = [m["text"] for m in rec.of("assistant_sentence")]
+    assert spoken[-1] == "So, where's the nearest countryside spot you'd fancy?"  # finished, not dropped
+    assert not rec.of("assistant_truncated")
+    assert "another thing" not in rec.of("assistant_done")[0]["text"]  # stopped at that sentence end
+    shown = "".join(m["text"] for m in rec.of("assistant_delta"))
+    assert shown.rstrip().endswith("fancy?")  # chat text matches what was spoken
