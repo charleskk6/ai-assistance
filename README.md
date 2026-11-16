@@ -1,5 +1,8 @@
 # Local-first assistant — Siri → MacBook → Local LLM / Web RAG → Apple Cantonese TTS
 
+> **Also in this repository:** [`coach/`](coach/README.md), the **British Conversation Coach**, a
+> local-first voice app (MLX + Whisper + Piper, React UI) for practising natural British English.
+
 Ask a question in Cantonese through Siri; a local model on your MacBook answers,
 searching the web first when the question needs current information; Apple's own
 Cantonese voice reads the answer back. No paid LLM API.

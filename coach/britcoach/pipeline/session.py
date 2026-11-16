@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from ..audio.pcm import FRAME_MS, FrameAssembler, pack_audio
+from ..audio.pcm import FrameAssembler, pack_audio
 from ..audio.turn import SilenceReached, SpeechEnded, SpeechStarted, TState, TurnConfig, TurnDetector
 from ..cloud.router import CloudPrefs, CloudRouter
 from ..coaching import detector as rules
@@ -602,10 +602,12 @@ class Session:
     def _truncate_last_assistant(self, heard: str) -> None:
         for t in reversed(self.conv.turns):
             if t.role == "assistant":
-                if heard and heard != t.text:
-                    t.text, t.interrupted = heard.rstrip() + " —", True
-                elif not heard:
+                if not heard:
                     self.conv.turns.remove(t)
+                else:
+                    if heard != t.text:
+                        t.text = heard.rstrip() + " —"
+                    t.interrupted = True  # cut off during playback, even if in its last sentence
                 return
 
     async def _on_playback(self, msg: dict) -> None:

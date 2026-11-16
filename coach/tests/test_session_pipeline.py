@@ -225,3 +225,17 @@ async def test_config_message(mode):
     cfg = rec.of("config")[-1]["config"]
     assert cfg["mode"] == "tutor" and cfg["barge_in_mode"] == mode and cfg["end_of_turn_ms"] == 700
     assert sess.policy.tutor and cfg["sensitivity"] == "high"
+
+
+async def test_barge_in_after_reply_fully_generated_marks_interrupted():
+    tts = MockTTS(ms_per_char=80)  # ~5 s of audio, so it is still playing when the user cuts in
+    sess, rec, _ = await new_session(llm=MockLLM(replies=["Right then, how was the school run this morning?"]), tts=tts)
+    await sess.handle_json({"type": "text_input", "text": "hello"})
+    await wait_for(lambda: rec.of("assistant_done"))
+    tid = rec.of("assistant_done")[0]["turn_id"]
+    await sess.handle_json({"type": "playback", "event": "started", "turn_id": tid})
+    for _ in range(4):
+        await sess.handle_audio(to_pcm([speech_frame()]))
+    assert rec.of("stop_audio")[0]["turn_id"] == tid
+    last_ai = [t for t in sess.conv.turns if t.role == "assistant"][-1]
+    assert last_ai.interrupted

@@ -10,3 +10,5 @@ data/
 frontend/node_modules/
 frontend/dist/
 .DS_Store
+benchmarks/e2e/
+frontend/tsconfig.tsbuildinfo

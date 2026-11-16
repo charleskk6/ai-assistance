@@ -33,8 +33,12 @@ class FasterWhisperSTT(STTBackend):
 
         local = self.models_dir / "stt" / f"faster-whisper-{self.model_name}"
         source = str(local) if local.exists() else self.model_name
-        self._model = WhisperModel(source, device="cpu", compute_type="int8", cpu_threads=self.threads,
-                                   download_root=str(self.models_dir / "stt"))
+        try:
+            self._model = WhisperModel(source, device="cpu", compute_type="int8", cpu_threads=self.threads,
+                                       download_root=str(self.models_dir / "stt"))
+        except Exception as e:  # noqa: BLE001
+            raise RuntimeError(f"Whisper model '{self.model_name}' is not installed at {local} and could not be "
+                               f"downloaded ({type(e).__name__}). Run: .venv/bin/python scripts/setup_models.py") from e
 
     def _transcribe(self, audio: np.ndarray) -> str:
         segments, _ = self._model.transcribe(
@@ -62,7 +66,10 @@ class WhisperCppSTT(STTBackend):
         from pywhispercpp.model import Model
 
         path = self.models_dir / "stt" / f"ggml-{self.model_name}.bin"
-        self._model = Model(str(path) if path.exists() else self.model_name,
+        if not path.exists():
+            raise FileNotFoundError(f"whisper.cpp model not found at {path}. "
+                                    "Run: .venv/bin/python scripts/setup_models.py --stt whispercpp")
+        self._model = Model(str(path),
                             models_dir=str(self.models_dir / "stt"), n_threads=self.threads,
                             print_progress=False, print_realtime=False, redirect_whispercpp_logs_to=None)
 

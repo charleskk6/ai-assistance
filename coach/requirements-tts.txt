@@ -1,0 +1,4 @@
+# Piper neural TTS. NOTE: piper-tts >= 1.3 is licensed GPL-3.0 (fine for personal,
+# local use; check the licence before redistributing). Without it, use the built-in
+# macOS voices: COACH_TTS_BACKEND=macos_say
+piper-tts>=1.3
