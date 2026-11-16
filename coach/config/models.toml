@@ -1,0 +1,83 @@
+# Model profiles, voices and licences.
+#
+# Availability of every repository listed here is checked on your Mac by
+#   .venv/bin/python scripts/setup_models.py --verify-only
+# which queries the Hugging Face API and prints each model's declared licence.
+# (These ids could not be verified from the build environment, which had no
+# Hugging Face access; the verify step exists so nothing is taken on trust.)
+
+[llm.profiles.small]
+label = "1.5B — fastest, weakest coaching"
+params_b = 1.5
+mlx = "mlx-community/Qwen2.5-1.5B-Instruct-4bit"
+ollama = "qwen2.5:1.5b"
+openai_compat = "qwen2.5-1.5b-instruct"
+licence = "Apache-2.0"
+approx_ram_gb = 1.2
+
+[llm.profiles.medium]
+label = "3B/4B — recommended default"
+params_b = 4
+# Qwen3-4B-Instruct-2507 is a non-thinking instruct model (no <think> latency).
+mlx = "mlx-community/Qwen3-4B-Instruct-2507-4bit"
+ollama = "qwen3:4b"
+openai_compat = "qwen3-4b-instruct-2507"
+licence = "Apache-2.0"
+approx_ram_gb = 2.6
+# Tried in order by setup_models.py if the primary id is unavailable.
+mlx_alternatives = ["mlx-community/Qwen3-4B-4bit", "mlx-community/Llama-3.2-3B-Instruct-4bit"]
+
+[llm.profiles.large]
+label = "7B/8B — best language, slower and hotter on a fanless Air"
+params_b = 7
+mlx = "mlx-community/Qwen2.5-7B-Instruct-4bit"
+ollama = "qwen2.5:7b"
+openai_compat = "qwen2.5-7b-instruct"
+licence = "Apache-2.0"
+approx_ram_gb = 4.6
+mlx_alternatives = ["mlx-community/Qwen3-8B-4bit"]
+
+# Llama 3.2 (Llama 3.2 Community Licence) and Qwen2.5-3B (Qwen Research Licence,
+# non-commercial) are deliberately not defaults because of their licence terms.
+
+[stt.faster_whisper]
+"tiny.en" = "Systran/faster-whisper-tiny.en"
+"base.en" = "Systran/faster-whisper-base.en"
+"small.en" = "Systran/faster-whisper-small.en"
+
+[stt.whispercpp]
+repo = "ggerganov/whisper.cpp"
+"tiny.en" = "ggml-tiny.en.bin"
+"base.en" = "ggml-base.en.bin"
+"small.en" = "ggml-small.en.bin"
+
+# Piper voices: https://huggingface.co/rhasspy/piper-voices (each voice has its own
+# MODEL_CARD with dataset licence). Path = en/en_GB/<name>/<quality>/<id>.onnx
+[[tts.piper_voices]]
+id = "en_GB-cori-medium"
+label = "Cori — southern English, female"
+path = "en/en_GB/cori/medium"
+
+[[tts.piper_voices]]
+id = "en_GB-northern_english_male-medium"
+label = "Northern English, male"
+path = "en/en_GB/northern_english_male/medium"
+
+[[tts.piper_voices]]
+id = "en_GB-jenny_dioco-medium"
+label = "Jenny — southern English, female"
+path = "en/en_GB/jenny_dioco/medium"
+
+[[tts.piper_voices]]
+id = "en_GB-alan-medium"
+label = "Alan — Scottish, male"
+path = "en/en_GB/alan/medium"
+
+[[tts.piper_voices]]
+id = "en_GB-alba-medium"
+label = "Alba — Scottish, female"
+path = "en/en_GB/alba/medium"
+
+# Built-in macOS voices (no download). Listed if present on the machine.
+[tts.macos_say]
+preferred = ["Daniel", "Kate", "Serena", "Oliver", "Stephanie", "Arthur", "Martha"]
